@@ -3,6 +3,7 @@ sites:
     url: https://babywellnessoss.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "baby wellness"
       - "hydrotherapie"
@@ -13,6 +14,7 @@ sites:
     url: https://autoschadevandecamp.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "autoschade"
       - "schadeherstel"
@@ -23,6 +25,7 @@ sites:
     url: https://www.horrenvoorjehuis.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "horren"
       - "huis"
@@ -33,6 +36,7 @@ sites:
     url: https://bjornrikkentimmerwerken.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "timmerwerken"
       - "diensten"
@@ -43,6 +47,7 @@ sites:
     url: https://blombouw.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "blombouw"
       - "bouw"
@@ -53,6 +58,7 @@ sites:
     url: https://bmbrabant.nl
     pages:
       - /
+      - /contact/
     requiredText:
       - "bouwmaterialen"
       - "brabant"
