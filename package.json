@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "monitor": "node monitor.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "js-yaml": "^4.1.0"
+  }
+}
