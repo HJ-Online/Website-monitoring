@@ -3,7 +3,13 @@ sites:
     url: https://babywellnessoss.nl
     pages:
       - /
-      - /contact/
+      - /over-ons/
+      - /baby-wellness/
+      - /floaten/
+      - /shantala-massage/
+      - /tarieven/
+      - /cadeaubonnen/
+      - /4010-2/
     requiredText:
       - "baby wellness"
       - "hydrotherapie"
@@ -14,10 +20,15 @@ sites:
     url: https://autoschadevandecamp.nl
     pages:
       - /
+      - /over-ons/
+      - /schadeherstel/
+      - /fotos-werk/
+      - /reviews/
+      - /openingstijden/
       - /contact/
     requiredText:
       - "autoschade"
-      - "schadeherstel"
+      - "schade"
     requiredButtons:
       - "afspraak"
 
@@ -25,6 +36,12 @@ sites:
     url: https://www.horrenvoorjehuis.nl
     pages:
       - /
+      - /overons/
+      - /producten/
+      - /rolhorraam/
+      - /voorzethorraam/
+      - /plissehordeur/
+      - /projecten/
       - /contact/
     requiredText:
       - "horren"
@@ -36,7 +53,6 @@ sites:
     url: https://bjornrikkentimmerwerken.nl
     pages:
       - /
-      - /contact/
     requiredText:
       - "timmerwerken"
       - "diensten"
@@ -47,6 +63,13 @@ sites:
     url: https://blombouw.nl
     pages:
       - /
+      - /over-ons/
+      - /diensten/
+      - /badkamer-toilet/
+      - /aanbouw/
+      - /verbouw/
+      - /nieuwbouw/
+      - /projecten/
       - /contact/
     requiredText:
       - "blombouw"
@@ -58,6 +81,9 @@ sites:
     url: https://bmbrabant.nl
     pages:
       - /
+      - /over-ons/
+      - /assortiment/
+      - /openingstijden/
       - /contact/
     requiredText:
       - "bouwmaterialen"
