@@ -1,0 +1,8 @@
+sites:
+  - name: Baby Wellness Oss
+    url: https://babywellnessoss.nl
+    pages:
+      - /
+    requiredText:
+      - "Floaten - Hydrotherapie"
+      - "Reserveren"
