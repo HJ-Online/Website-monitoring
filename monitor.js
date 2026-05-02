@@ -45,7 +45,7 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 
         if (errors.length > 0 && status !== "error") {
           status = "warning";
-          details.push("Console errors gevonden");
+          details.push("Console errors: " + errors.slice(0, 3).join(" | "));
         }
 
         await page.screenshot({
