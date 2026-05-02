@@ -43,9 +43,8 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
           }
         }
 
-        if (errors.length > 0 && status !== "error") {
-          status = "warning";
-          details.push("Console errors: " + errors.slice(0, 3).join(" | "));
+        if (errors.length > 0) {
+          details.push("Console meldingen: " + errors.slice(0, 3).join(" | "));
         }
 
         await page.screenshot({
