@@ -1,3 +1,4 @@
+
 sites:
   - name: Baby Wellness Oss
     url: https://babywellnessoss.nl
@@ -8,3 +9,58 @@ sites:
       - "Reserveren"
     requiredButtons:
       - "Reserveren"
+      
+  - name: Autoschade van de Camp
+    url: https://autoschadevandecamp.nl
+    pages:
+      - /
+    requiredText:
+      - "Autoschade van de Camp"
+      - "Schadeherstel"
+      - "Afspraak maken"
+    requiredButtons:
+      - "Afspraak maken"
+
+  - name: Horren voor je huis
+    url: https://www.horrenvoorjehuis.nl
+    pages:
+      - /
+    requiredText:
+      - "Horren voor je huis"
+      - "Waarmee kunnen wij u helpen?"
+      - "Contact opnemen"
+    requiredButtons:
+      - "Contact opnemen"
+
+  - name: Bjorn Rikken Timmerwerken
+    url: https://bjornrikkentimmerwerken.nl
+    pages:
+      - /
+    requiredText:
+      - "Welkom bij Bjorn Rikken Timmerwerken"
+      - "Neem direct contact op"
+      - "Diensten"
+    requiredButtons:
+      - "Neem direct contact op"
+
+  - name: Blombouw
+    url: https://blombouw.nl
+    pages:
+      - /
+    requiredText:
+      - "Blombouw"
+      - "Wat wij u kunnen bieden"
+      - "Bekijk meer"
+    requiredButtons:
+      - "Bekijk meer"
+
+  - name: Bouwmaterialen Brabant
+    url: https://bmbrabant.nl
+    pages:
+      - /
+    requiredText:
+      - "Bouwmaterialen Brabant"
+      - "Ruim assortiment"
+      - "Neem contact op"
+    requiredButtons:
+      - "NEEM CONTACT OP"
