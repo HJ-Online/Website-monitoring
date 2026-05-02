@@ -4,6 +4,14 @@ const yaml = require("js-yaml");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 
+function safeFileName(text) {
+  return text
+    .toLowerCase()
+    .replace(/https?:\/\//g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 (async () => {
   fs.mkdirSync("dashboard", { recursive: true });
 
@@ -22,6 +30,7 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 
       let status = "ok";
       const details = [];
+      const screenshotName = `${safeFileName(site.name + "-" + path)}.png`;
 
       try {
         const response = await page.goto(url, {
@@ -43,12 +52,26 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
           }
         }
 
-        if (errors.length > 0) {
-          details.push("Console meldingen: " + errors.slice(0, 3).join(" | "));
+        for (const buttonText of site.requiredButtons || []) {
+          if (!html.includes(buttonText)) {
+            status = "error";
+            details.push("Belangrijke knop/tekst ontbreekt: " + buttonText);
+          }
+        }
+
+        const filteredErrors = errors.filter(e =>
+          !e.includes("403") &&
+          !e.includes("ERR_NAME_NOT_RESOLVED") &&
+          !e.includes("favicon") &&
+          !e.includes("Failed to load resource")
+        );
+
+        if (filteredErrors.length > 0) {
+          details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
         }
 
         await page.screenshot({
-          path: `dashboard/${site.name.replaceAll(" ", "-")}.png`,
+          path: `dashboard/${screenshotName}`,
           fullPage: true
         });
 
@@ -62,7 +85,8 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
         url,
         status,
         details: details.join("<br>") || "Alles lijkt goed",
-        checkedAt: new Date().toLocaleString("nl-NL")
+        checkedAt: new Date().toLocaleString("nl-NL"),
+        screenshot: screenshotName
       });
 
       await page.close();
@@ -73,9 +97,14 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 
   const rows = results.map(r => `
     <tr class="${r.status}">
-      <td>${r.site}</td>
+      <td>
+        <strong>${r.site}</strong><br>
+        <a href="${r.screenshot}" target="_blank">
+          <img src="${r.screenshot}" width="220">
+        </a>
+      </td>
       <td><a href="${r.url}" target="_blank">${r.url}</a></td>
-      <td>${r.status}</td>
+      <td><strong>${r.status}</strong></td>
       <td>${r.details}</td>
       <td>${r.checkedAt}</td>
     </tr>
@@ -89,8 +118,10 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
       <title>Website Monitoring</title>
       <style>
         body { font-family: Arial, sans-serif; padding: 30px; background: #f4f4f4; }
+        h1 { margin-bottom: 25px; }
         table { width: 100%; border-collapse: collapse; background: white; }
-        th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+        th, td { padding: 14px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+        img { border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; background: #fff; }
         .ok { background: #e7f8e7; }
         .warning { background: #fff5cc; }
         .error { background: #ffdede; }
@@ -100,7 +131,7 @@ const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
       <h1>Website Monitoring Dashboard</h1>
       <table>
         <tr>
-          <th>Website</th>
+          <th>Website + screenshot</th>
           <th>URL</th>
           <th>Status</th>
           <th>Details</th>
