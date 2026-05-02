@@ -6,3 +6,5 @@ sites:
     requiredText:
       - "Floaten - Hydrotherapie"
       - "Reserveren"
+    requiredButtons:
+      - "Reserveren"
