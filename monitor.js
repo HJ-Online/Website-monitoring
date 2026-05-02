@@ -44,16 +44,17 @@ function safeFileName(text) {
         }
 
         const html = await page.content();
+        const htmlLower = html.toLowerCase();
 
         for (const text of site.requiredText || []) {
-          if (!html.includes(text)) {
+          if (!htmlLower.includes(text.toLowerCase())) {
             status = "error";
             details.push("Tekst ontbreekt: " + text);
           }
         }
 
         for (const buttonText of site.requiredButtons || []) {
-          if (!html.includes(buttonText)) {
+          if (!htmlLower.includes(buttonText.toLowerCase())) {
             status = "error";
             details.push("Belangrijke knop/tekst ontbreekt: " + buttonText);
           }
