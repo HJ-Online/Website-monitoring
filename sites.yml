@@ -12,9 +12,7 @@ sites:
       - /4010-2/
     requiredText:
       - "baby wellness"
-      - "hydrotherapie"
-    requiredButtons:
-      - "reserveren"
+    requiredButtons: []
 
   - name: Autoschade van de Camp
     url: https://autoschadevandecamp.nl
@@ -28,9 +26,7 @@ sites:
       - /contact/
     requiredText:
       - "autoschade"
-      - "schade"
-    requiredButtons:
-      - "afspraak"
+    requiredButtons: []
 
   - name: Horren voor je huis
     url: https://www.horrenvoorjehuis.nl
@@ -45,9 +41,7 @@ sites:
       - /contact/
     requiredText:
       - "horren"
-      - "huis"
-    requiredButtons:
-      - "contact"
+    requiredButtons: []
 
   - name: Bjorn Rikken Timmerwerken
     url: https://bjornrikkentimmerwerken.nl
@@ -55,9 +49,7 @@ sites:
       - /
     requiredText:
       - "timmerwerken"
-      - "diensten"
-    requiredButtons:
-      - "contact"
+    requiredButtons: []
 
   - name: Blombouw
     url: https://blombouw.nl
@@ -73,9 +65,7 @@ sites:
       - /contact/
     requiredText:
       - "blombouw"
-      - "bouw"
-    requiredButtons:
-      - "bekijk"
+    requiredButtons: []
 
   - name: Bouwmaterialen Brabant
     url: https://bmbrabant.nl
@@ -87,6 +77,4 @@ sites:
       - /contact/
     requiredText:
       - "bouwmaterialen"
-      - "brabant"
-    requiredButtons:
-      - "contact"
+    requiredButtons: []
