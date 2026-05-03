@@ -5,6 +5,7 @@ const crypto = require("crypto");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 const CONCURRENCY = Number(process.env.CONCURRENCY || 5);
+const GITHUB_USERNAME = "HJ-Online";
 
 function safeFileName(text) {
   return text
@@ -80,7 +81,10 @@ async function findOpenMonitoringIssue(token, repo) {
     }
   );
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.log("Open issues ophalen mislukt:", response.status, await response.text());
+    return null;
+  }
 
   const issues = await response.json();
 
@@ -114,7 +118,9 @@ async function createOrUpdateVisitorIssue(results, websites) {
     return;
   }
 
-  const body = `<!-- monitoring-fingerprint:${fingerprint} -->
+  const body = `@${GITHUB_USERNAME}
+
+<!-- monitoring-fingerprint:${fingerprint} -->
 
 Er zijn problemen gevonden die waarschijnlijk zichtbaar zijn voor normale websitebezoekers.
 
@@ -159,7 +165,12 @@ Deze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, time
       }
     );
 
-    console.log(response.ok ? "Bestaande monitoring issue bijgewerkt." : "Issue update mislukt.");
+    if (!response.ok) {
+      console.log("Issue update mislukt:", response.status, await response.text());
+    } else {
+      console.log("Bestaande monitoring issue bijgewerkt met @mention.");
+    }
+
     return;
   }
 
@@ -177,7 +188,11 @@ Deze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, time
     })
   });
 
-  console.log(response.ok ? "Nieuwe bezoekersprobleem issue aangemaakt." : "Issue aanmaken mislukt.");
+  if (!response.ok) {
+    console.log("Issue aanmaken mislukt:", response.status, await response.text());
+  } else {
+    console.log("Nieuwe bezoekersprobleem issue aangemaakt met @mention.");
+  }
 }
 
 function normalizePathFromUrl(pageUrl, baseUrl) {
