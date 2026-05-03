@@ -1,80 +1,48 @@
 sites:
   - name: Baby Wellness Oss
     url: https://babywellnessoss.nl
-    pages:
-      - /
-      - /over-ons/
-      - /baby-wellness/
-      - /floaten/
-      - /shantala-massage/
-      - /tarieven/
-      - /cadeaubonnen/
-      - /4010-2/
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "baby wellness"
     requiredButtons: []
 
   - name: Autoschade van de Camp
     url: https://autoschadevandecamp.nl
-    pages:
-      - /
-      - /over-ons/
-      - /schadeherstel/
-      - /fotos-werk/
-      - /reviews/
-      - /openingstijden/
-      - /contact/
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "autoschade"
     requiredButtons: []
 
   - name: Horren voor je huis
     url: https://www.horrenvoorjehuis.nl
-    pages:
-      - /
-      - /overons/
-      - /producten/
-      - /rolhorraam/
-      - /voorzethorraam/
-      - /plissehordeur/
-      - /projecten/
-      - /contact/
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "horren"
     requiredButtons: []
 
   - name: Bjorn Rikken Timmerwerken
     url: https://bjornrikkentimmerwerken.nl
-    pages:
-      - /
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "timmerwerken"
     requiredButtons: []
 
   - name: Blombouw
     url: https://blombouw.nl
-    pages:
-      - /
-      - /over-ons/
-      - /diensten/
-      - /badkamer-toilet/
-      - /aanbouw/
-      - /verbouw/
-      - /nieuwbouw/
-      - /projecten/
-      - /contact/
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "blombouw"
     requiredButtons: []
 
   - name: Bouwmaterialen Brabant
     url: https://bmbrabant.nl
-    pages:
-      - /
-      - /over-ons/
-      - /assortiment/
-      - /openingstijden/
-      - /contact/
+    sitemap: true
+    maxPages: 25
     requiredText:
       - "bouwmaterialen"
     requiredButtons: []
