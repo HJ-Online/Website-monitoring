@@ -3,7 +3,6 @@ const fs = require("fs");
 const yaml = require("js-yaml");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
-
 const CONCURRENCY = Number(process.env.CONCURRENCY || 5);
 
 function safeFileName(text) {
@@ -26,6 +25,64 @@ function esc(value) {
 
 function uniq(arr) {
   return [...new Set(arr)];
+}
+
+async function createGitHubIssue(results, websites) {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+
+  if (!token || !repo) {
+    console.log("Geen GitHub token/repo beschikbaar. Issue overgeslagen.");
+    return;
+  }
+
+  const errorPages = results.filter(r => r.status === "error");
+
+  if (errorPages.length === 0) {
+    console.log("Geen errors gevonden. Geen GitHub issue nodig.");
+    return;
+  }
+
+  const dashboardUrl = process.env.DASHBOARD_URL || "https://hj-online.github.io/Website-monitoring/";
+
+  const body = errorPages.slice(0, 20).map(r => {
+    return `### ❌ ${r.site} — ${r.path}
+
+**URL:** ${r.url}
+
+**Details:**
+${r.details.map(d => `- ${d}`).join("\n")}
+
+**Tijd:** ${r.checkedAt}
+`;
+  }).join("\n---\n");
+
+  const issue = {
+    title: `🚨 Website monitoring: ${errorPages.length} error(s) gevonden`,
+    body: `${body}
+
+---
+
+[Dashboard openen](${dashboardUrl})
+`
+  };
+
+  const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify(issue)
+  });
+
+  if (!response.ok) {
+    console.log("GitHub issue aanmaken mislukt:", response.status, await response.text());
+  } else {
+    console.log("GitHub issue aangemaakt.");
+  }
 }
 
 function normalizePathFromUrl(pageUrl, baseUrl) {
@@ -240,6 +297,7 @@ async function checkPage(browser, contextOptions, site, path) {
         path: `dashboard/${screenshotName}`,
         fullPage: true
       });
+
       screenshot = screenshotName;
     }
   } catch (e) {
@@ -251,6 +309,7 @@ async function checkPage(browser, contextOptions, site, path) {
         path: `dashboard/${screenshotName}`,
         fullPage: true
       });
+
       screenshot = screenshotName;
     } catch {
       screenshot = null;
@@ -353,6 +412,8 @@ async function checkPage(browser, contextOptions, site, path) {
   const warningWebsites = websites.filter(w => w.status === "warning").length;
   const errorWebsites = websites.filter(w => w.status === "error").length;
   const lastCheck = new Date().toLocaleString("nl-NL");
+
+  await createGitHubIssue(results, websites);
 
   const websiteRows = websites.map((site, siteIndex) => {
     const pageRows = site.pages.map((p, pageIndex) => {
