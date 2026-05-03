@@ -113,6 +113,7 @@ function esc(value) {
 
       results.push({
         site: site.name,
+        siteUrl: site.url,
         path,
         url,
         status,
@@ -128,64 +129,114 @@ function esc(value) {
 
   await browser.close();
 
-  const total = results.length;
-  const uniqueSites = new Set(results.map(r => r.site)).size;
-  const ok = results.filter(r => r.status === "ok").length;
-  const warning = results.filter(r => r.status === "warning").length;
-  const error = results.filter(r => r.status === "error").length;
+  const grouped = {};
+  for (const r of results) {
+    if (!grouped[r.site]) {
+      grouped[r.site] = {
+        name: r.site,
+        siteUrl: r.siteUrl,
+        pages: []
+      };
+    }
+    grouped[r.site].pages.push(r);
+  }
+
+  const websites = Object.values(grouped).map(site => {
+    const hasError = site.pages.some(p => p.status === "error");
+    const hasWarning = site.pages.some(p => p.status === "warning");
+    const status = hasError ? "error" : hasWarning ? "warning" : "ok";
+
+    return {
+      ...site,
+      status,
+      ok: site.pages.filter(p => p.status === "ok").length,
+      warning: site.pages.filter(p => p.status === "warning").length,
+      error: site.pages.filter(p => p.status === "error").length,
+      total: site.pages.length,
+      lastCheck: site.pages[site.pages.length - 1]?.checkedAt || ""
+    };
+  });
+
+  const totalPages = results.length;
+  const totalWebsites = websites.length;
+  const okWebsites = websites.filter(w => w.status === "ok").length;
+  const warningWebsites = websites.filter(w => w.status === "warning").length;
+  const errorWebsites = websites.filter(w => w.status === "error").length;
   const lastCheck = new Date().toLocaleString("nl-NL");
-  const successRate = total ? Math.round((ok / total) * 100) : 0;
 
-  const problemRows = results
-    .filter(r => r.status !== "ok")
-    .map(r => `
-      <div class="status-row">
-        <div>
-          <strong>${esc(r.site)}</strong>
-          <div class="muted">${esc(r.url)}</div>
-        </div>
-        <span class="${r.status === "error" ? "danger" : "warning"}">${esc(r.status)}</span>
-      </div>
-    `).join("");
+  const websiteRows = websites.map((site, siteIndex) => {
+    const pageRows = site.pages.map((p, pageIndex) => `
+      <tr class="page-row page-of-${siteIndex}" style="display:none" data-status="${esc(p.status)}">
+        <td>
+          <div class="page-indent">
+            <strong>${esc(p.path)}</strong>
+            <div class="muted">${esc(p.url)}</div>
+          </div>
+        </td>
+        <td><span class="badge badge-${esc(p.status)}">${esc(p.status)}</span></td>
+        <td>${p.details.map(d => `<div>${esc(d)}</div>`).join("")}</td>
+        <td>${esc(p.checkedAt)}</td>
+        <td class="num">
+          <button class="secondary" type="button" onclick="togglePageDetails('${siteIndex}-${pageIndex}')">Details</button>
+        </td>
+      </tr>
 
-  const rows = results.map((r, index) => `
-    <tr class="${esc(r.status)}" data-status="${esc(r.status)}" data-site="${esc(r.site.toLowerCase())}">
-      <td class="customer">
-        ${esc(r.site)}
-        <div class="muted">${esc(r.path)}</div>
-      </td>
-      <td>
-        <a href="${esc(r.url)}" target="_blank">${esc(r.url)}</a>
-      </td>
-      <td>
-        <span class="badge badge-${esc(r.status)}">${esc(r.status)}</span>
-      </td>
-      <td>${esc(r.checkedAt)}</td>
-      <td class="num">
-        <button class="secondary" type="button" onclick="toggleDetails(${index})">Details openen</button>
-      </td>
-    </tr>
-    <tr id="details-${index}" class="detail-row" style="display:none">
-      <td colspan="5">
-        <div class="detail-box">
-          <div>
-            <label>Controle details</label>
-            <div class="hint">${r.details.map(d => `<div>• ${esc(d)}</div>`).join("")}</div>
-            <div class="actions">
-              <a class="button-link" href="${esc(r.url)}" target="_blank">Website openen</a>
-              <a class="button-link secondary-link" href="${esc(r.screenshot)}" target="_blank">Screenshot openen</a>
+      <tr id="page-details-${siteIndex}-${pageIndex}" class="page-detail-row page-of-${siteIndex}" style="display:none">
+        <td colspan="5">
+          <div class="detail-box">
+            <div>
+              <label>Pagina controle</label>
+              <div class="hint">
+                ${p.details.map(d => `<div>• ${esc(d)}</div>`).join("")}
+              </div>
+              <div class="actions">
+                <a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a>
+                <a class="button-link secondary-link" href="${esc(p.screenshot)}" target="_blank">Screenshot openen</a>
+              </div>
+            </div>
+            <div>
+              <label>Screenshot</label>
+              <a href="${esc(p.screenshot)}" target="_blank">
+                <img class="screenshot-preview" src="${esc(p.screenshot)}" loading="lazy" alt="Screenshot ${esc(p.site)}">
+              </a>
             </div>
           </div>
-          <div>
-            <label>Screenshot preview</label>
-            <a href="${esc(r.screenshot)}" target="_blank">
-              <img class="screenshot-preview" src="${esc(r.screenshot)}" loading="lazy" alt="Screenshot ${esc(r.site)}">
-            </a>
-          </div>
+        </td>
+      </tr>
+    `).join("");
+
+    return `
+      <tr class="website-row ${esc(site.status)}" data-status="${esc(site.status)}" data-site="${esc(site.name.toLowerCase())}">
+        <td class="customer">
+          ${esc(site.name)}
+          <div class="muted">${esc(site.siteUrl)}</div>
+        </td>
+        <td><span class="badge badge-${esc(site.status)}">${esc(site.status)}</span></td>
+        <td>
+          <span class="tag positive">${site.ok} OK</span>
+          <span class="tag warning">${site.warning} warnings</span>
+          <span class="tag danger">${site.error} errors</span>
+        </td>
+        <td>${esc(site.lastCheck)}</td>
+        <td class="num">
+          <button type="button" onclick="toggleSitePages(${siteIndex})">Pagina’s openen</button>
+        </td>
+      </tr>
+      ${pageRows}
+    `;
+  }).join("");
+
+  const problemRows = websites
+    .filter(w => w.status !== "ok")
+    .map(w => `
+      <div class="status-row">
+        <div>
+          <strong>${esc(w.name)}</strong>
+          <div class="muted">${w.error} errors · ${w.warning} warnings · ${w.total} pagina’s</div>
         </div>
-      </td>
-    </tr>
-  `).join("");
+        <span class="${w.status === "error" ? "danger" : "warning"}">${esc(w.status)}</span>
+      </div>
+    `).join("");
 
   fs.writeFileSync("dashboard/index.html", `
 <!doctype html>
@@ -251,13 +302,13 @@ main{
   max-width:1700px;
   margin:0 auto;
 }
-.card,.panel{
+.card{
   background:var(--card);
   border:1px solid var(--line);
   border-radius:var(--radius);
   box-shadow:var(--shadow);
+  padding:18px;
 }
-.card{padding:18px}
 .grid{
   display:grid;
   grid-template-columns:repeat(5,minmax(150px,1fr));
@@ -293,13 +344,13 @@ main{
   padding:10px 0;
 }
 .status-row:last-child{border-bottom:0}
-.status-row strong{font-size:14px}
 .positive{color:var(--success);font-weight:800}
 .warning{color:var(--warning);font-weight:800}
 .danger{color:var(--danger);font-weight:800}
 .muted{
   color:var(--muted);
   font-size:13px;
+  margin-top:4px;
 }
 .hint{
   color:var(--muted);
@@ -320,10 +371,6 @@ input,select{
   background:#fff;
   color:var(--text);
   outline:none;
-}
-input:focus,select:focus{
-  border-color:var(--accent);
-  box-shadow:0 0 0 4px rgba(67,191,242,.18);
 }
 button,.button-link{
   border:0;
@@ -369,20 +416,31 @@ th{
 .num{text-align:right;white-space:nowrap}
 .customer{font-weight:800}
 tr:hover td{background:var(--accent-soft)}
-.badge{
+.badge,.tag{
   display:inline-flex;
   border-radius:999px;
   padding:5px 10px;
   font-weight:900;
   font-size:12px;
   text-transform:uppercase;
+  margin:2px;
 }
-.badge-ok{background:var(--success-soft);color:var(--success)}
-.badge-warning{background:var(--warning-soft);color:var(--warning)}
-.badge-error{background:var(--danger-soft);color:var(--danger)}
-tr.error td{background:#fffafa}
-tr.warning td{background:#fffdf5}
-.detail-row td{background:#fff!important}
+.badge-ok,.tag.positive{background:var(--success-soft);color:var(--success)}
+.badge-warning,.tag.warning{background:var(--warning-soft);color:var(--warning)}
+.badge-error,.tag.danger{background:var(--danger-soft);color:var(--danger)}
+.website-row.error td{background:#fffafa}
+.website-row.warning td{background:#fffdf5}
+.page-row td{
+  background:#fff;
+  font-size:13px;
+}
+.page-indent{
+  padding-left:26px;
+  border-left:4px solid var(--accent-soft);
+}
+.page-detail-row td{
+  background:#fff!important;
+}
 .detail-box{
   display:grid;
   grid-template-columns:1fr 320px;
@@ -428,34 +486,34 @@ label{
 <body>
 <header>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Controleert HTTP-status, verplichte teksten, belangrijke knoppen, browsermeldingen en screenshots per pagina.</p>
+  <p>Automatische controle van WordPress- en WooCommerce-websites. Eerst zie je de websites; per website kun je de onderliggende pagina’s en screenshots openen.</p>
 </header>
 
 <main>
   <section class="grid">
     <div class="card">
       <div class="kpi-title">Websites</div>
-      <div class="kpi-value">${uniqueSites}</div>
+      <div class="kpi-value">${totalWebsites}</div>
       <div class="kpi-sub">Unieke websites</div>
     </div>
     <div class="card">
       <div class="kpi-title">Pagina checks</div>
-      <div class="kpi-value">${total}</div>
+      <div class="kpi-value">${totalPages}</div>
       <div class="kpi-sub">Totaal gecontroleerd</div>
     </div>
     <div class="card">
-      <div class="kpi-title">OK</div>
-      <div class="kpi-value positive">${ok}</div>
-      <div class="kpi-sub">Geen problemen</div>
+      <div class="kpi-title">OK websites</div>
+      <div class="kpi-value positive">${okWebsites}</div>
+      <div class="kpi-sub">Alles groen</div>
     </div>
     <div class="card">
       <div class="kpi-title">Warnings</div>
-      <div class="kpi-value warning">${warning}</div>
+      <div class="kpi-value warning">${warningWebsites}</div>
       <div class="kpi-sub">Aandacht nodig</div>
     </div>
     <div class="card">
       <div class="kpi-title">Errors</div>
-      <div class="kpi-value danger">${error}</div>
+      <div class="kpi-value danger">${errorWebsites}</div>
       <div class="kpi-sub">Direct controleren</div>
     </div>
   </section>
@@ -468,25 +526,25 @@ label{
         <span>${esc(lastCheck)}</span>
       </div>
       <div class="status-row">
-        <strong>Succespercentage</strong>
-        <span class="${error ? "danger" : "positive"}">${successRate}%</span>
+        <strong>Algemene status</strong>
+        <span class="${errorWebsites ? "danger" : warningWebsites ? "warning" : "positive"}">${errorWebsites ? "Errors gevonden" : warningWebsites ? "Warnings gevonden" : "Alles lijkt goed"}</span>
       </div>
       <div class="status-row">
-        <strong>Algemene status</strong>
-        <span class="${error ? "danger" : warning ? "warning" : "positive"}">${error ? "Errors gevonden" : warning ? "Warnings gevonden" : "Alles lijkt goed"}</span>
+        <strong>Structuur</strong>
+        <span>${totalWebsites} websites · ${totalPages} pagina’s</span>
       </div>
     </div>
 
     <div class="card">
       <h3>Controle & aandachtspunten</h3>
-      <p class="hint">Errors zijn echte problemen. Warnings zijn vaak beveiligingsblokkades zoals 403 vanuit GitHub Actions.</p>
-      ${problemRows || `<div class="status-row"><strong>Geen aandachtspunten</strong><span class="positive">Alle checks zijn groen</span></div>`}
+      <p class="hint">Klik op “Pagina’s openen” om per website de gecontroleerde pagina’s te bekijken.</p>
+      ${problemRows || `<div class="status-row"><strong>Geen aandachtspunten</strong><span class="positive">Alle websites zijn groen</span></div>`}
     </div>
   </section>
 
   <section class="card">
-    <h3>Website checks</h3>
-    <p class="hint">Gebruik zoeken en filters. Screenshots worden pas zichtbaar wanneer je details opent.</p>
+    <h3>Websites</h3>
+    <p class="hint">Eerst zie je websites. Klap een website uit voor pagina’s, details en screenshots.</p>
 
     <div class="toolbar">
       <input id="searchInput" type="text" placeholder="Zoeken op website of URL..." oninput="filterRows()">
@@ -508,24 +566,41 @@ label{
         <thead>
           <tr>
             <th>Website</th>
-            <th>URL</th>
             <th>Status</th>
+            <th>Pagina’s</th>
             <th>Laatste check</th>
             <th class="num">Details</th>
           </tr>
         </thead>
         <tbody id="tableBody">
-          ${rows}
+          ${websiteRows}
         </tbody>
       </table>
     </div>
-    <div id="emptyState" class="empty">Geen resultaten gevonden.</div>
+
+    <div id="emptyState" class="empty">Geen websites gevonden.</div>
   </section>
 </main>
 
 <script>
-function toggleDetails(index) {
-  const row = document.getElementById("details-" + index);
+function toggleSitePages(siteIndex) {
+  const pageRows = document.querySelectorAll(".page-of-" + siteIndex);
+  const first = pageRows[0];
+  if (!first) return;
+
+  const shouldOpen = first.style.display === "none";
+
+  pageRows.forEach(row => {
+    if (row.classList.contains("page-detail-row")) {
+      row.style.display = "none";
+    } else {
+      row.style.display = shouldOpen ? "table-row" : "none";
+    }
+  });
+}
+
+function togglePageDetails(id) {
+  const row = document.getElementById("page-details-" + id);
   if (!row) return;
   row.style.display = row.style.display === "none" ? "table-row" : "none";
 }
@@ -533,11 +608,10 @@ function toggleDetails(index) {
 function filterRows() {
   const q = document.getElementById("searchInput").value.toLowerCase();
   const status = document.getElementById("statusFilter").value;
-  const rows = document.querySelectorAll("#tableBody tr[data-status]");
+  const websiteRows = document.querySelectorAll(".website-row");
   let visible = 0;
 
-  rows.forEach(row => {
-    const detail = row.nextElementSibling;
+  websiteRows.forEach(row => {
     const matchesSearch =
       row.dataset.site.includes(q) ||
       row.innerText.toLowerCase().includes(q);
@@ -546,9 +620,12 @@ function filterRows() {
     const show = matchesSearch && matchesStatus;
 
     row.style.display = show ? "table-row" : "none";
-    if (detail && detail.classList.contains("detail-row")) {
-      detail.style.display = "none";
-    }
+
+    const siteIndex = Array.from(websiteRows).indexOf(row);
+    document.querySelectorAll(".page-of-" + siteIndex).forEach(pageRow => {
+      pageRow.style.display = "none";
+    });
+
     if (show) visible++;
   });
 
@@ -558,11 +635,10 @@ function filterRows() {
 function sortRows() {
   const mode = document.getElementById("sortFilter").value;
   const tbody = document.getElementById("tableBody");
-  const mainRows = Array.from(tbody.querySelectorAll("tr[data-status]"));
-
+  const websiteRows = Array.from(tbody.querySelectorAll(".website-row"));
   const statusRank = { error: 0, warning: 1, ok: 2 };
 
-  mainRows.sort((a, b) => {
+  websiteRows.sort((a, b) => {
     if (mode === "status") {
       return statusRank[a.dataset.status] - statusRank[b.dataset.status];
     }
@@ -572,13 +648,15 @@ function sortRows() {
     return 0;
   });
 
-  mainRows.forEach(row => {
-    const detail = row.nextElementSibling;
+  websiteRows.forEach(row => {
+    const originalIndex = Array.from(document.querySelectorAll(".website-row")).indexOf(row);
+    const relatedPages = Array.from(document.querySelectorAll(".page-of-" + originalIndex));
+
     tbody.appendChild(row);
-    if (detail && detail.classList.contains("detail-row")) {
-      detail.style.display = "none";
-      tbody.appendChild(detail);
-    }
+    relatedPages.forEach(p => {
+      p.style.display = "none";
+      tbody.appendChild(p);
+    });
   });
 
   filterRows();
