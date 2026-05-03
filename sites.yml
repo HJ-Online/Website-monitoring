@@ -5,7 +5,6 @@ sites:
     maxPages: 8
     requiredText:
       - "baby wellness"
-      - "DIT-BESTAAT-ZEKER-NIET-123"
     requiredButtons: []
 
   - name: Autoschade van de Camp
