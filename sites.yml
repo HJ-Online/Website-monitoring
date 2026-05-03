@@ -2,7 +2,7 @@ sites:
   - name: Baby Wellness Oss
     url: https://babywellnessoss.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "baby wellness"
     requiredButtons: []
@@ -10,7 +10,7 @@ sites:
   - name: Autoschade van de Camp
     url: https://autoschadevandecamp.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "autoschade"
     requiredButtons: []
@@ -18,7 +18,7 @@ sites:
   - name: Horren voor je huis
     url: https://www.horrenvoorjehuis.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "horren"
     requiredButtons: []
@@ -26,7 +26,7 @@ sites:
   - name: Bjorn Rikken Timmerwerken
     url: https://bjornrikkentimmerwerken.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "timmerwerken"
     requiredButtons: []
@@ -34,7 +34,7 @@ sites:
   - name: Blombouw
     url: https://blombouw.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "blombouw"
     requiredButtons: []
@@ -42,7 +42,7 @@ sites:
   - name: Bouwmaterialen Brabant
     url: https://bmbrabant.nl
     sitemap: true
-    maxPages: 25
+    maxPages: 8
     requiredText:
       - "bouwmaterialen"
     requiredButtons: []
