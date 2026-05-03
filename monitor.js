@@ -22,6 +22,121 @@ function esc(value) {
   }[m]));
 }
 
+function uniq(arr) {
+  return [...new Set(arr)];
+}
+
+function normalizePathFromUrl(pageUrl, baseUrl) {
+  try {
+    const url = new URL(pageUrl);
+    const base = new URL(baseUrl);
+    if (url.hostname.replace(/^www\./, "") !== base.hostname.replace(/^www\./, "")) {
+      return null;
+    }
+    return url.pathname || "/";
+  } catch {
+    return null;
+  }
+}
+
+function isUsefulPage(url) {
+  const lower = String(url).toLowerCase();
+
+  const blockedParts = [
+    "/wp-content/",
+    "/wp-includes/",
+    "/wp-json/",
+    "/feed/",
+    "/comments/",
+    "/tag/",
+    "/category/",
+    "/author/",
+    "/portfolio-category/",
+    "/project-category/",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".pdf",
+    ".zip",
+    ".xml"
+  ];
+
+  return !blockedParts.some(part => lower.includes(part));
+}
+
+async function getSitemapUrls(request, site) {
+  const baseUrl = site.url.replace(/\/$/, "");
+  const sitemapCandidates = [
+    `${baseUrl}/sitemap_index.xml`,
+    `${baseUrl}/wp-sitemap.xml`,
+    `${baseUrl}/page-sitemap.xml`,
+    `${baseUrl}/sitemap.xml`
+  ];
+
+  const foundUrls = [];
+
+  async function fetchXml(url) {
+    try {
+      const response = await request.get(url, {
+        timeout: 20000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8"
+        }
+      });
+
+      if (!response.ok()) return "";
+
+      const text = await response.text();
+      if (!text.includes("<urlset") && !text.includes("<sitemapindex")) return "";
+      return text;
+    } catch {
+      return "";
+    }
+  }
+
+  function extractLocs(xml) {
+    return [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)].map(m =>
+      m[1].trim().replace(/&amp;/g, "&")
+    );
+  }
+
+  for (const sitemapUrl of sitemapCandidates) {
+    const xml = await fetchXml(sitemapUrl);
+    if (!xml) continue;
+
+    const locs = extractLocs(xml);
+
+    const childSitemaps = locs.filter(loc => loc.toLowerCase().includes("sitemap"));
+    const pageUrls = locs.filter(loc => !loc.toLowerCase().includes("sitemap"));
+
+    foundUrls.push(...pageUrls);
+
+    for (const child of childSitemaps.slice(0, 8)) {
+      const childXml = await fetchXml(child);
+      if (!childXml) continue;
+      foundUrls.push(...extractLocs(childXml));
+    }
+
+    if (foundUrls.length > 0) break;
+  }
+
+  const paths = uniq(
+    foundUrls
+      .filter(isUsefulPage)
+      .map(url => normalizePathFromUrl(url, baseUrl))
+      .filter(Boolean)
+  );
+
+  const finalPaths = paths.length ? paths : (site.pages || ["/"]);
+  const maxPages = Number(site.maxPages || 25);
+
+  return uniq(["/", ...finalPaths]).slice(0, maxPages);
+}
+
 (async () => {
   fs.mkdirSync("dashboard", { recursive: true });
 
@@ -36,10 +151,15 @@ function esc(value) {
     }
   };
 
+  const requestContext = await chromium.request.newContext();
   const results = [];
 
   for (const site of config.sites) {
-    for (const path of site.pages || ["/"]) {
+    const pages = site.sitemap
+      ? await getSitemapUrls(requestContext, site)
+      : (site.pages || ["/"]);
+
+    for (const path of pages) {
       const url = site.url.replace(/\/$/, "") + path;
       const context = await browser.newContext(contextOptions);
       const page = await context.newPage();
@@ -127,6 +247,7 @@ function esc(value) {
     }
   }
 
+  await requestContext.dispose();
   await browser.close();
 
   const grouped = {};
@@ -216,6 +337,7 @@ function esc(value) {
           <span class="tag positive">${site.ok} OK</span>
           <span class="tag warning">${site.warning} warnings</span>
           <span class="tag danger">${site.error} errors</span>
+          <span class="tag">${site.total} pagina’s</span>
         </td>
         <td>${esc(site.lastCheck)}</td>
         <td class="num">
@@ -428,6 +550,7 @@ tr:hover td{background:var(--accent-soft)}
 .badge-ok,.tag.positive{background:var(--success-soft);color:var(--success)}
 .badge-warning,.tag.warning{background:var(--warning-soft);color:var(--warning)}
 .badge-error,.tag.danger{background:var(--danger-soft);color:var(--danger)}
+.tag{background:var(--accent-soft);color:var(--accent-dark)}
 .website-row.error td{background:#fffafa}
 .website-row.warning td{background:#fffdf5}
 .page-row td{
@@ -486,7 +609,7 @@ label{
 <body>
 <header>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Eerst zie je de websites; per website kun je de onderliggende pagina’s en screenshots openen.</p>
+  <p>Automatische controle van WordPress- en WooCommerce-websites. Pagina’s worden automatisch uit de sitemap gehaald wanneer sitemap: true aanstaat.</p>
 </header>
 
 <main>
@@ -499,7 +622,7 @@ label{
     <div class="card">
       <div class="kpi-title">Pagina checks</div>
       <div class="kpi-value">${totalPages}</div>
-      <div class="kpi-sub">Totaal gecontroleerd</div>
+      <div class="kpi-sub">Uit sitemap + homepage</div>
     </div>
     <div class="card">
       <div class="kpi-title">OK websites</div>
@@ -537,14 +660,14 @@ label{
 
     <div class="card">
       <h3>Controle & aandachtspunten</h3>
-      <p class="hint">Klik op “Pagina’s openen” om per website de gecontroleerde pagina’s te bekijken.</p>
+      <p class="hint">Klik op “Pagina’s openen” om per website de sitemap-pagina’s te bekijken.</p>
       ${problemRows || `<div class="status-row"><strong>Geen aandachtspunten</strong><span class="positive">Alle websites zijn groen</span></div>`}
     </div>
   </section>
 
   <section class="card">
     <h3>Websites</h3>
-    <p class="hint">Eerst zie je websites. Klap een website uit voor pagina’s, details en screenshots.</p>
+    <p class="hint">Eerst zie je websites. Klap een website uit voor gevonden pagina’s, details en screenshots.</p>
 
     <div class="toolbar">
       <input id="searchInput" type="text" placeholder="Zoeken op website of URL..." oninput="filterRows()">
@@ -621,7 +744,7 @@ function filterRows() {
 
     row.style.display = show ? "table-row" : "none";
 
-    const siteIndex = Array.from(websiteRows).indexOf(row);
+    const siteIndex = row.dataset.index;
     document.querySelectorAll(".page-of-" + siteIndex).forEach(pageRow => {
       pageRow.style.display = "none";
     });
@@ -645,12 +768,12 @@ function sortRows() {
     if (mode === "site") {
       return a.dataset.site.localeCompare(b.dataset.site);
     }
-    return 0;
+    return Number(a.dataset.index) - Number(b.dataset.index);
   });
 
   websiteRows.forEach(row => {
-    const originalIndex = Array.from(document.querySelectorAll(".website-row")).indexOf(row);
-    const relatedPages = Array.from(document.querySelectorAll(".page-of-" + originalIndex));
+    const siteIndex = row.dataset.index;
+    const relatedPages = Array.from(document.querySelectorAll(".page-of-" + siteIndex));
 
     tbody.appendChild(row);
     relatedPages.forEach(p => {
