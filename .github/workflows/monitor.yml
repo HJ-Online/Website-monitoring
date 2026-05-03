@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 jobs:
   monitor:
@@ -22,8 +23,14 @@ jobs:
           node-version: 20
 
       - run: npm install
+
       - run: npx playwright install --with-deps chromium
-      - run: npm run monitor
+
+      - name: Run monitor
+        run: npm run monitor
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
