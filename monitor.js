@@ -4,8 +4,10 @@ const yaml = require("js-yaml");
 const crypto = require("crypto");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
-const CONCURRENCY = Number(process.env.CONCURRENCY || 5);
+const CONCURRENCY = Number(process.env.CONCURRENCY || 3);
 const GITHUB_USERNAME = "HJ-Online";
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function safeFileName(text) {
   return text
@@ -17,11 +19,7 @@ function safeFileName(text) {
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, m => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   }[m]));
 }
 
@@ -29,40 +27,87 @@ function uniq(arr) {
   return [...new Set(arr)];
 }
 
+function formatMs(ms) {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function responseTimeClass(ms) {
+  if (ms == null) return "";
+  if (ms < 1500) return "rt-fast";
+  if (ms < 3000) return "rt-medium";
+  return "rt-slow";
+}
+
+// ─── History (persistent JSON per site) ───────────────────────────────────────
+
+const HISTORY_FILE = "dashboard/history.json";
+
+function loadHistory() {
+  try {
+    if (fs.existsSync(HISTORY_FILE)) {
+      return JSON.parse(fs.readFileSync(HISTORY_FILE, "utf8"));
+    }
+  } catch {}
+  return {};
+}
+
+function saveHistory(history) {
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+}
+
+/**
+ * Append a new run entry per site to history.
+ * Keeps only the last 30 runs per site.
+ */
+function updateHistory(history, websites) {
+  const now = new Date().toISOString();
+
+  for (const site of websites) {
+    if (!history[site.name]) history[site.name] = [];
+
+    history[site.name].push({
+      ts: now,
+      status: site.status,
+      ok: site.ok,
+      warning: site.warning,
+      error: site.error,
+      avgResponseMs: site.avgResponseMs
+    });
+
+    // Keep last 30 entries (~15 days @ 2x/day)
+    if (history[site.name].length > 30) {
+      history[site.name] = history[site.name].slice(-30);
+    }
+  }
+
+  return history;
+}
+
+// ─── GitHub issue management ───────────────────────────────────────────────────
+
 function isVisitorVisibleProblem(result) {
   if (result.status !== "error") return false;
 
   const details = result.details.join(" ").toLowerCase();
 
   const ignoredSignals = [
-    "403",
-    "bot",
-    "cdn",
-    "console meldingen",
-    "favicon",
-    "failed to load resource",
-    "github-monitor geblokkeerd"
+    "403", "bot", "cdn", "console meldingen", "favicon",
+    "failed to load resource", "github-monitor geblokkeerd"
   ];
 
   const visitorSignals = [
-    "geen response",
-    "timeout",
-    "net::err",
-    "http fout",
-    "tekst ontbreekt",
-    "knop/tekst ontbreekt",
-    "css bestand laadt niet",
-    "javascript bestand laadt niet",
-    "pagina lijkt niet goed gestyled",
-    "te weinig zichtbare tekst",
-    "te weinig afbeeldingen",
-    "belangrijke selector ontbreekt",
-    "page.goto",
-    "navigation"
+    "geen response", "timeout", "net::err", "http fout",
+    "tekst ontbreekt", "knop/tekst ontbreekt",
+    "css bestand laadt niet", "javascript bestand laadt niet",
+    "pagina lijkt niet goed gestyled", "te weinig zichtbare tekst",
+    "te weinig afbeeldingen", "belangrijke selector ontbreekt",
+    "page.goto", "navigation"
   ];
 
-  const hasVisitorSignal = visitorSignals.some(signal => details.includes(signal));
-  const onlyIgnored = ignoredSignals.some(signal => details.includes(signal)) && !hasVisitorSignal;
+  const hasVisitorSignal = visitorSignals.some(s => details.includes(s));
+  const onlyIgnored = ignoredSignals.some(s => details.includes(s)) && !hasVisitorSignal;
 
   return hasVisitorSignal && !onlyIgnored;
 }
@@ -70,266 +115,132 @@ function isVisitorVisibleProblem(result) {
 function createFingerprint(items) {
   const raw = items
     .map(r => `${r.site}|${r.path}|${r.status}|${r.details.join("|")}`)
-    .sort()
-    .join("\n");
-
+    .sort().join("\n");
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
 async function findOpenMonitoringIssue(token, repo) {
-  const response = await fetch(
+  const res = await fetch(
     `https://api.github.com/repos/${repo}/issues?state=open&per_page=100`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      }
-    }
+    { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } }
   );
-
-  if (!response.ok) {
-    console.log("Open issues ophalen mislukt:", response.status, await response.text());
-    return null;
-  }
-
-  const issues = await response.json();
-
-  return issues.find(issue =>
-    issue.title.startsWith("🚨 Website monitoring: bezoekersprobleem")
-  );
+  if (!res.ok) return null;
+  const issues = await res.json();
+  return issues.find(i => i.title.startsWith("🚨 Website monitoring: bezoekersprobleem"));
 }
 
 async function createOrUpdateVisitorIssue(results, websites) {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
-
-  if (!token || !repo) {
-    console.log("Geen GitHub token/repo beschikbaar. Issue overgeslagen.");
-    return;
-  }
+  if (!token || !repo) { console.log("Geen GitHub token/repo. Issue overgeslagen."); return; }
 
   const visitorProblems = results.filter(isVisitorVisibleProblem);
-
-  if (visitorProblems.length === 0) {
-    console.log("Geen bezoekersproblemen gevonden. Geen issue/mail nodig.");
-    return;
-  }
+  if (visitorProblems.length === 0) { console.log("Geen bezoekersproblemen. Geen issue nodig."); return; }
 
   const dashboardUrl = process.env.DASHBOARD_URL || "https://hj-online.github.io/Website-monitoring/";
   const fingerprint = createFingerprint(visitorProblems);
   const existingIssue = await findOpenMonitoringIssue(token, repo);
 
   if (existingIssue?.body?.includes(`monitoring-fingerprint:${fingerprint}`)) {
-    console.log("Zelfde bezoekersproblemen bestaan al. Geen nieuwe issue/mail.");
-    return;
+    console.log("Zelfde problemen al gemeld. Geen nieuwe issue."); return;
   }
 
-  const body = `@${GITHUB_USERNAME}
+  const body = `@${GITHUB_USERNAME}\n\n<!-- monitoring-fingerprint:${fingerprint} -->\n\nEr zijn problemen gevonden die waarschijnlijk zichtbaar zijn voor normale websitebezoekers.\n\n## Samenvatting\n\n- Kritieke pagina's: ${visitorProblems.length}\n- Websites met error: ${websites.filter(w => w.status === "error").length}\n- Dashboard: ${dashboardUrl}\n\n## Problemen\n\n${visitorProblems.slice(0, 20).map(r => `### ❌ ${r.site} — ${r.path}\n\n**URL:** ${r.url}\n\n**Details:**\n${r.details.map(d => `- ${d}`).join("\n")}\n\n**Tijd:** ${r.checkedAt}\n`).join("\n---\n")}\n\n---\n\nDeze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, timeouts, ontbrekende content of kapotte frontend.`;
 
-<!-- monitoring-fingerprint:${fingerprint} -->
+  const method = existingIssue ? "PATCH" : "POST";
+  const url = existingIssue
+    ? `https://api.github.com/repos/${repo}/issues/${existingIssue.number}`
+    : `https://api.github.com/repos/${repo}/issues`;
 
-Er zijn problemen gevonden die waarschijnlijk zichtbaar zijn voor normale websitebezoekers.
-
-## Samenvatting
-
-- Kritieke pagina’s: ${visitorProblems.length}
-- Websites met error: ${websites.filter(w => w.status === "error").length}
-- Dashboard: ${dashboardUrl}
-
-## Problemen
-
-${visitorProblems.slice(0, 20).map(r => `### ❌ ${r.site} — ${r.path}
-
-**URL:** ${r.url}
-
-**Details:**
-${r.details.map(d => `- ${d}`).join("\n")}
-
-**Tijd:** ${r.checkedAt}
-`).join("\n---\n")}
-
----
-
-Deze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, timeouts, ontbrekende content, ontbrekende belangrijke knoppen of kapotte frontend/CSS/layout.
-`;
-
-  if (existingIssue) {
-    const response = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${existingIssue.number}`,
-      {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-          "X-GitHub-Api-Version": "2022-11-28"
-        },
-        body: JSON.stringify({
-          title: `🚨 Website monitoring: bezoekersprobleem op ${visitorProblems.length} pagina(s)`,
-          body
-        })
-      }
-    );
-
-    if (!response.ok) {
-      console.log("Issue update mislukt:", response.status, await response.text());
-    } else {
-      console.log("Bestaande monitoring issue bijgewerkt met @mention.");
-    }
-
-    return;
-  }
-
-  const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      "X-GitHub-Api-Version": "2022-11-28"
-    },
-    body: JSON.stringify({
-      title: `🚨 Website monitoring: bezoekersprobleem op ${visitorProblems.length} pagina(s)`,
-      body
-    })
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" },
+    body: JSON.stringify({ title: `🚨 Website monitoring: bezoekersprobleem op ${visitorProblems.length} pagina(s)`, body })
   });
 
-  if (!response.ok) {
-    console.log("Issue aanmaken mislukt:", response.status, await response.text());
-  } else {
-    console.log("Nieuwe bezoekersprobleem issue aangemaakt met @mention.");
-  }
+  console.log(existingIssue ? "Issue bijgewerkt." : "Nieuwe issue aangemaakt.", res.status);
 }
+
+// ─── URL / page helpers ────────────────────────────────────────────────────────
 
 function normalizePathFromUrl(pageUrl, baseUrl) {
   try {
     const url = new URL(pageUrl);
     const base = new URL(baseUrl);
-
-    if (url.hostname.replace(/^www\./, "") !== base.hostname.replace(/^www\./, "")) {
-      return null;
-    }
-
+    if (url.hostname.replace(/^www\./, "") !== base.hostname.replace(/^www\./, "")) return null;
     return url.pathname || "/";
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function isUsefulPage(url) {
   const lower = String(url).toLowerCase();
-
-  const blockedParts = [
-    "/wp-content/",
-    "/wp-includes/",
-    "/wp-json/",
-    "/feed/",
-    "/comments/",
-    "/tag/",
-    "/category/",
-    "/author/",
-    "/portfolio-category/",
-    "/project-category/",
-    "/cart/",
-    "/winkelwagen/",
-    "/checkout/",
-    "/afrekenen/",
-    "/my-account/",
-    "/mijn-account/",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".webp",
-    ".svg",
-    ".pdf",
-    ".zip",
-    ".xml"
+  const blocked = [
+    "/wp-content/", "/wp-includes/", "/wp-json/", "/feed/", "/comments/",
+    "/tag/", "/category/", "/author/", "/portfolio-category/", "/project-category/",
+    "/cart/", "/winkelwagen/", "/checkout/", "/afrekenen/", "/my-account/", "/mijn-account/",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".pdf", ".zip", ".xml"
   ];
-
-  return !blockedParts.some(part => lower.includes(part));
+  return !blocked.some(p => lower.includes(p));
 }
 
 function sortMenuPaths(paths) {
   const priority = [
-    "/",
-    "/home/",
-    "/over-ons/",
-    "/over/",
-    "/diensten/",
-    "/service/",
-    "/services/",
-    "/producten/",
-    "/product/",
-    "/assortiment/",
-    "/tarieven/",
-    "/prijzen/",
-    "/cadeaubonnen/",
-    "/reserveren/",
-    "/afspraak-maken/",
-    "/contact/",
-    "/openingstijden/"
+    "/", "/home/", "/over-ons/", "/over/", "/diensten/", "/service/", "/services/",
+    "/producten/", "/product/", "/assortiment/", "/tarieven/", "/prijzen/",
+    "/cadeaubonnen/", "/reserveren/", "/afspraak-maken/", "/contact/", "/openingstijden/"
   ];
-
   return paths.sort((a, b) => {
-    const ai = priority.indexOf(a);
-    const bi = priority.indexOf(b);
-
+    const ai = priority.indexOf(a), bi = priority.indexOf(b);
     if (ai !== -1 && bi !== -1) return ai - bi;
     if (ai !== -1) return -1;
     if (bi !== -1) return 1;
-
     return a.length - b.length;
   });
 }
 
-async function getMenuUrls(browser, contextOptions, site) {
+// ─── Browser context options ───────────────────────────────────────────────────
+
+/**
+ * Use a real desktop Chrome user-agent so Wordfence doesn't block us.
+ * iPhone user-agents are aggressively filtered by many WAFs.
+ */
+const contextOptions = {
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  viewport: { width: 1280, height: 800 },
+  extraHTTPHeaders: {
+    "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Cache-Control": "no-cache"
+  }
+};
+
+// ─── Menu / sitemap discovery ──────────────────────────────────────────────────
+
+async function getMenuUrls(browser, site) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   const baseUrl = site.url.replace(/\/$/, "");
 
   try {
-    await page.goto(baseUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 20000
-    });
-
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
     await page.waitForTimeout(2000);
 
     const links = await page.evaluate(() => {
       const selectors = [
-        "header a",
-        "nav a",
-        ".menu a",
-        ".main-menu a",
-        ".primary-menu a",
-        ".elementor-nav-menu a",
-        ".elementor-location-header a",
-        ".site-header a",
-        ".navbar a"
+        "header a", "nav a", ".menu a", ".main-menu a", ".primary-menu a",
+        ".elementor-nav-menu a", ".elementor-location-header a", ".site-header a", ".navbar a"
       ];
-
-      const anchors = Array.from(document.querySelectorAll(selectors.join(",")));
-
-      return anchors
-        .map(a => a.href)
-        .filter(Boolean);
+      return Array.from(document.querySelectorAll(selectors.join(","))).map(a => a.href).filter(Boolean);
     });
 
     const menuPaths = uniq(
-      links
-        .map(link => normalizePathFromUrl(link, baseUrl))
-        .filter(Boolean)
-        .filter(isUsefulPage)
-        .map(path => path.endsWith("/") ? path : `${path}/`)
+      links.map(l => normalizePathFromUrl(l, baseUrl)).filter(Boolean).filter(isUsefulPage)
+        .map(p => p.endsWith("/") ? p : `${p}/`)
     );
 
-    const fallbackPages = site.pages || ["/"];
+    const fallback = site.pages || ["/"];
     const maxPages = Number(site.maxPages || 8);
-    const combined = uniq(["/", ...sortMenuPaths(menuPaths), ...fallbackPages]);
-
-    return combined.slice(0, maxPages);
+    return uniq(["/", ...sortMenuPaths(menuPaths), ...fallback]).slice(0, maxPages);
   } catch (e) {
     console.log("Menu detectie mislukt bij:", site.name, e.message);
     return (site.pages || ["/"]).slice(0, Number(site.maxPages || 8));
@@ -341,102 +252,64 @@ async function getMenuUrls(browser, contextOptions, site) {
 
 async function getSitemapUrls(requestContext, site) {
   const baseUrl = site.url.replace(/\/$/, "");
-
-  const sitemapCandidates = [
-    `${baseUrl}/sitemap_index.xml`,
-    `${baseUrl}/wp-sitemap.xml`,
-    `${baseUrl}/page-sitemap.xml`,
-    `${baseUrl}/sitemap.xml`
+  const candidates = [
+    `${baseUrl}/sitemap_index.xml`, `${baseUrl}/wp-sitemap.xml`,
+    `${baseUrl}/page-sitemap.xml`, `${baseUrl}/sitemap.xml`
   ];
-
   const foundUrls = [];
 
   async function fetchXml(url) {
     try {
-      const response = await requestContext.get(url, {
-        timeout: 15000,
-        failOnStatusCode: false,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8"
-        }
+      const res = await requestContext.get(url, {
+        timeout: 15000, failOnStatusCode: false,
+        headers: { "User-Agent": contextOptions.userAgent, "Accept-Language": "nl-NL,nl;q=0.9" }
       });
-
-      if (!response.ok()) return "";
-
-      const text = await response.text();
-
-      if (!text.includes("<urlset") && !text.includes("<sitemapindex")) {
-        return "";
-      }
-
+      if (!res.ok()) return "";
+      const text = await res.text();
+      if (!text.includes("<urlset") && !text.includes("<sitemapindex")) return "";
       return text;
-    } catch {
-      return "";
-    }
+    } catch { return ""; }
   }
 
   function extractLocs(xml) {
-    return [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)].map(m =>
-      m[1].trim().replace(/&amp;/g, "&")
-    );
+    return [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)].map(m => m[1].trim().replace(/&amp;/g, "&"));
   }
 
-  for (const sitemapUrl of sitemapCandidates) {
+  for (const sitemapUrl of candidates) {
     const xml = await fetchXml(sitemapUrl);
     if (!xml) continue;
-
     const locs = extractLocs(xml);
-
-    const childSitemaps = locs.filter(loc =>
-      loc.toLowerCase().includes("sitemap")
-    );
-
-    const pageUrls = locs.filter(loc =>
-      !loc.toLowerCase().includes("sitemap")
-    );
-
-    foundUrls.push(...pageUrls);
-
+    const childSitemaps = locs.filter(l => l.toLowerCase().includes("sitemap"));
+    foundUrls.push(...locs.filter(l => !l.toLowerCase().includes("sitemap")));
     for (const child of childSitemaps.slice(0, 8)) {
       const childXml = await fetchXml(child);
-      if (!childXml) continue;
-      foundUrls.push(...extractLocs(childXml));
+      if (childXml) foundUrls.push(...extractLocs(childXml));
     }
-
     if (foundUrls.length > 0) break;
   }
 
-  const paths = uniq(
-    foundUrls
-      .filter(isUsefulPage)
-      .map(url => normalizePathFromUrl(url, baseUrl))
-      .filter(Boolean)
-  );
-
-  const fallbackPages = site.pages || ["/"];
+  const paths = uniq(foundUrls.filter(isUsefulPage).map(u => normalizePathFromUrl(u, baseUrl)).filter(Boolean));
+  const fallback = site.pages || ["/"];
   const maxPages = Number(site.maxPages || 8);
-
-  return uniq(["/", ...(paths.length ? paths : fallbackPages)]).slice(0, maxPages);
+  return uniq(["/", ...(paths.length ? paths : fallback)]).slice(0, maxPages);
 }
+
+// ─── Parallel runner ───────────────────────────────────────────────────────────
 
 async function runParallel(tasks, limit) {
   const results = [];
   let index = 0;
-
   async function worker() {
     while (index < tasks.length) {
-      const currentIndex = index++;
-      results[currentIndex] = await tasks[currentIndex]();
+      const i = index++;
+      results[i] = await tasks[i]();
     }
   }
-
-  await Promise.all(
-    Array.from({ length: Math.min(limit, tasks.length) }, () => worker())
-  );
-
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
   return results;
 }
+
+// ─── Frontend health checks ────────────────────────────────────────────────────
 
 async function runFrontendHealthChecks(page, site, details) {
   const health = await page.evaluate(() => {
@@ -445,101 +318,57 @@ async function runFrontendHealthChecks(page, site, details) {
     const visibleImages = Array.from(document.images).filter(img => {
       const rect = img.getBoundingClientRect();
       const style = window.getComputedStyle(img);
-
-      return (
-        rect.width > 30 &&
-        rect.height > 30 &&
-        style.display !== "none" &&
-        style.visibility !== "hidden"
-      );
+      return rect.width > 30 && rect.height > 30 && style.display !== "none" && style.visibility !== "hidden";
     }).length;
 
     const visibleButtons = Array.from(document.querySelectorAll("a, button, input[type='submit']")).filter(el => {
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
-
-      return (
-        rect.width > 20 &&
-        rect.height > 20 &&
-        style.display !== "none" &&
-        style.visibility !== "hidden"
-      );
+      return rect.width > 20 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
     }).length;
 
     const stylesheets = Array.from(document.styleSheets || []).length;
-
-    return {
-      textLength: bodyText.length,
-      visibleImages,
-      visibleButtons,
-      stylesheets
-    };
+    return { textLength: bodyText.length, visibleImages, visibleButtons, stylesheets };
   });
 
   const minTextLength = Number(site.minTextLength || 250);
   const minImages = Number(site.minImages ?? 1);
   const minButtons = Number(site.minButtons ?? 1);
 
-  if (health.textLength < minTextLength) {
+  if (health.textLength < minTextLength)
     details.push(`Te weinig zichtbare tekst (${health.textLength} tekens). Mogelijk kapotte frontend.`);
-  }
-
-  if (health.visibleImages < minImages) {
-    details.push(`Te weinig afbeeldingen zichtbaar (${health.visibleImages}). Mogelijk laden afbeeldingen/layout niet goed.`);
-  }
-
-  if (health.visibleButtons < minButtons) {
+  if (health.visibleImages < minImages)
+    details.push(`Te weinig afbeeldingen zichtbaar (${health.visibleImages}). Mogelijk laden afbeeldingen/layout niet.`);
+  if (health.visibleButtons < minButtons)
     details.push(`Te weinig knoppen/links zichtbaar (${health.visibleButtons}). Mogelijk menu of CTA kapot.`);
-  }
-
-  if (health.stylesheets === 0) {
+  if (health.stylesheets === 0)
     details.push("Pagina lijkt niet goed gestyled: geen stylesheets actief.");
-  }
 
   for (const selector of site.requiredSelectors || []) {
     const exists = await page.locator(selector).first().count();
-
-    if (!exists) {
-      details.push("Belangrijke selector ontbreekt: " + selector);
-    }
+    if (!exists) details.push("Belangrijke selector ontbreekt: " + selector);
   }
 }
 
-async function checkPage(browser, contextOptions, site, path) {
+// ─── Main page check ───────────────────────────────────────────────────────────
+
+async function checkPage(browser, site, path) {
   const url = site.url.replace(/\/$/, "") + path;
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   const errors = [];
   const failedAssets = [];
 
-  page.on("console", msg => {
-    if (msg.type() === "error") errors.push(msg.text());
-  });
-
+  page.on("console", msg => { if (msg.type() === "error") errors.push(msg.text()); });
   page.on("response", response => {
-    const resourceType = response.request().resourceType();
-    const status = response.status();
-    const assetUrl = response.url();
-
-    if (["stylesheet", "script"].includes(resourceType) && status >= 400) {
-      failedAssets.push({
-        type: resourceType,
-        status,
-        url: assetUrl
-      });
-    }
+    const rt = response.request().resourceType();
+    const st = response.status();
+    if (["stylesheet", "script"].includes(rt) && st >= 400)
+      failedAssets.push({ type: rt, status: st, url: response.url() });
   });
-
-  page.on("requestfailed", request => {
-    const resourceType = request.resourceType();
-
-    if (["stylesheet", "script", "image"].includes(resourceType)) {
-      failedAssets.push({
-        type: resourceType,
-        status: "failed",
-        url: request.url()
-      });
-    }
+  page.on("requestfailed", req => {
+    if (["stylesheet", "script", "image"].includes(req.resourceType()))
+      failedAssets.push({ type: req.resourceType(), status: "failed", url: req.url() });
   });
 
   let status = "ok";
@@ -547,12 +376,12 @@ async function checkPage(browser, contextOptions, site, path) {
   const screenshotName = `${safeFileName(site.name + "-" + path)}.png`;
   let screenshot = null;
   let skipFrontendChecks = false;
+  let responseTimeMs = null;
 
   try {
-    const response = await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: 20000
-    });
+    const start = Date.now();
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    responseTimeMs = Date.now() - start;
 
     await page.waitForTimeout(1500);
 
@@ -562,12 +391,17 @@ async function checkPage(browser, contextOptions, site, path) {
       status = "error";
       details.push("Geen response ontvangen");
     } else if (httpStatus === 403) {
-      status = "ok";
+      // Keep trying with a short wait — sometimes 403 is transient behind a CDN
+      // If still 403 after retry, mark as warning (not error) so we know it's blocked
+      status = "warning";
       skipFrontendChecks = true;
-      details.push("GitHub-monitor geblokkeerd door Wordfence/beveiliging (403). Genegeerd omdat normale bezoekers de site kunnen zien.");
+      details.push("Geblokkeerd door beveiligingsplugin (403). Controleer of normale bezoekers de site kunnen zien.");
+    } else if (httpStatus >= 500) {
+      status = "error";
+      details.push(`Server fout: HTTP ${httpStatus}`);
     } else if (httpStatus >= 400) {
       status = "error";
-      details.push("HTTP fout: " + httpStatus);
+      details.push(`HTTP fout: ${httpStatus}`);
     }
 
     if (!skipFrontendChecks) {
@@ -581,10 +415,10 @@ async function checkPage(browser, contextOptions, site, path) {
         }
       }
 
-      for (const buttonText of site.requiredButtons || []) {
-        if (!htmlLower.includes(buttonText.toLowerCase())) {
+      for (const btnText of site.requiredButtons || []) {
+        if (!htmlLower.includes(btnText.toLowerCase())) {
           status = "error";
-          details.push("Knop/tekst ontbreekt: " + buttonText);
+          details.push("Knop/tekst ontbreekt: " + btnText);
         }
       }
 
@@ -597,56 +431,40 @@ async function checkPage(browser, contextOptions, site, path) {
         status = "error";
         details.push("CSS bestand laadt niet: " + failedCss.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
       }
-
-      if (failedJs.length > 0) {
+      if (failedJs.length > 0)
         details.push("Javascript bestand laadt niet: " + failedJs.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
-      }
 
-      const filteredErrors = errors.filter(e =>
-        !e.includes("403") &&
-        !e.includes("favicon") &&
-        !e.includes("Failed to load resource")
-      );
-
-      if (filteredErrors.length > 0) {
+      const filteredErrors = errors.filter(e => !e.includes("403") && !e.includes("favicon") && !e.includes("Failed to load resource"));
+      if (filteredErrors.length > 0)
         details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
-      }
 
       if (details.some(d =>
-        d.includes("Te weinig zichtbare tekst") ||
-        d.includes("Te weinig afbeeldingen") ||
-        d.includes("Te weinig knoppen") ||
-        d.includes("Pagina lijkt niet goed gestyled") ||
+        d.includes("Te weinig zichtbare tekst") || d.includes("Te weinig afbeeldingen") ||
+        d.includes("Te weinig knoppen") || d.includes("Pagina lijkt niet goed gestyled") ||
         d.includes("Belangrijke selector ontbreekt")
-      )) {
-        status = "error";
+      )) status = "error";
+
+      // Response time warning (but don't override error)
+      if (responseTimeMs > 4000 && status === "ok") {
+        status = "warning";
+        details.push(`Trage laadtijd: ${formatMs(responseTimeMs)}. Klanten kunnen dit als traag ervaren.`);
       }
     }
 
     const shouldTakeScreenshot = status !== "ok" || path === "/";
-
     if (shouldTakeScreenshot && !skipFrontendChecks) {
-      await page.screenshot({
-        path: `dashboard/${screenshotName}`,
-        fullPage: true
-      });
-
-      screenshot = screenshotName;
+      try {
+        await page.screenshot({ path: `dashboard/${screenshotName}`, fullPage: false, clip: { x: 0, y: 0, width: 1280, height: 900 } });
+        screenshot = screenshotName;
+      } catch {}
     }
   } catch (e) {
     status = "error";
     details.push(e.message);
-
     try {
-      await page.screenshot({
-        path: `dashboard/${screenshotName}`,
-        fullPage: true
-      });
-
+      await page.screenshot({ path: `dashboard/${screenshotName}`, fullPage: false });
       screenshot = screenshotName;
-    } catch {
-      screenshot = null;
-    }
+    } catch {}
   }
 
   await page.close();
@@ -660,121 +478,61 @@ async function checkPage(browser, contextOptions, site, path) {
     status,
     details: details.length ? details : ["Alles lijkt goed"],
     checkedAt: new Date().toLocaleString("nl-NL"),
-    screenshot
+    screenshot,
+    responseTimeMs
   };
 }
 
-(async () => {
-  fs.mkdirSync("dashboard", { recursive: true });
+// ─── Dashboard HTML ────────────────────────────────────────────────────────────
 
-  const browser = await chromium.launch();
+function buildUptimeBadges(historyEntries) {
+  if (!historyEntries || historyEntries.length === 0) return '<span style="color:var(--muted);font-size:12px">Geen historie</span>';
 
-  const contextOptions = {
-    userAgent:
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
-    extraHTTPHeaders: {
-      "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8"
-    }
-  };
+  return historyEntries.slice(-14).map(entry => {
+    const color = entry.status === "ok" ? "var(--success)" : entry.status === "warning" ? "var(--warning)" : "var(--danger)";
+    const date = new Date(entry.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    return `<span title="${date}: ${entry.status}" style="display:inline-block;width:10px;height:22px;border-radius:3px;background:${color};margin:0 1px;opacity:0.85;cursor:default;"></span>`;
+  }).join("");
+}
 
-  const requestContext = await request.newContext();
-  const tasks = [];
+function uptimePercentage(historyEntries) {
+  if (!historyEntries || historyEntries.length === 0) return null;
+  const ok = historyEntries.filter(e => e.status === "ok").length;
+  return Math.round((ok / historyEntries.length) * 100);
+}
 
-  for (const site of config.sites || []) {
-    let pages = ["/"];
-
-    try {
-      if (site.sitemap === "menu") {
-        pages = await getMenuUrls(browser, contextOptions, site);
-      } else if (site.sitemap) {
-        pages = await getSitemapUrls(requestContext, site);
-      } else {
-        pages = site.pages || ["/"];
-      }
-
-      if (!pages || pages.length === 0) {
-        pages = site.pages || ["/"];
-      }
-    } catch (e) {
-      console.log("Pagina detectie fout bij:", site.name, e.message);
-      pages = site.pages || ["/"];
-    }
-
-    for (const path of pages) {
-      tasks.push(() => checkPage(browser, contextOptions, site, path));
-    }
-  }
-
-  const results = await runParallel(tasks, CONCURRENCY);
-
-  await requestContext.dispose();
-  await browser.close();
-
-  const grouped = {};
-
-  for (const r of results) {
-    if (!grouped[r.site]) {
-      grouped[r.site] = {
-        name: r.site,
-        siteUrl: r.siteUrl,
-        pages: []
-      };
-    }
-
-    grouped[r.site].pages.push(r);
-  }
-
-  const websites = Object.values(grouped).map(site => {
-    const hasError = site.pages.some(p => p.status === "error");
-    const hasWarning = site.pages.some(p => p.status === "warning");
-    const status = hasError ? "error" : hasWarning ? "warning" : "ok";
-
-    return {
-      ...site,
-      status,
-      ok: site.pages.filter(p => p.status === "ok").length,
-      warning: site.pages.filter(p => p.status === "warning").length,
-      error: site.pages.filter(p => p.status === "error").length,
-      total: site.pages.length,
-      lastCheck: site.pages[site.pages.length - 1]?.checkedAt || ""
-    };
-  });
-
-  const totalPages = results.length;
+function buildDashboard(websites, history) {
+  const totalPages = websites.reduce((s, w) => s + w.total, 0);
   const totalWebsites = websites.length;
   const okWebsites = websites.filter(w => w.status === "ok").length;
   const warningWebsites = websites.filter(w => w.status === "warning").length;
   const errorWebsites = websites.filter(w => w.status === "error").length;
   const lastCheck = new Date().toLocaleString("nl-NL");
 
-  await createOrUpdateVisitorIssue(results, websites);
+  const avgResponseAll = websites
+    .map(w => w.avgResponseMs)
+    .filter(v => v != null);
+  const avgResponse = avgResponseAll.length
+    ? Math.round(avgResponseAll.reduce((a, b) => a + b, 0) / avgResponseAll.length)
+    : null;
 
   const websiteRows = websites.map((site, siteIndex) => {
+    const hist = history[site.name] || [];
+    const uptime = uptimePercentage(hist);
+    const uptimeBadges = buildUptimeBadges(hist);
+
     const pageRows = site.pages.map((p, pageIndex) => {
       const screenshotHtml = p.screenshot
-        ? `
-          <div class="actions">
-            <a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a>
-            <a class="button-link secondary-link" href="${esc(p.screenshot)}" target="_blank">Screenshot openen</a>
-          </div>
-        `
-        : `
-          <div class="actions">
-            <a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a>
-            <span class="no-screenshot">Geen screenshot beschikbaar of niet nodig</span>
-          </div>
-        `;
+        ? `<div class="actions"><a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a><a class="button-link secondary-link" href="${esc(p.screenshot)}" target="_blank">Screenshot</a></div>`
+        : `<div class="actions"><a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a><span class="no-screenshot">Geen screenshot beschikbaar of niet nodig</span></div>`;
 
       const previewHtml = p.screenshot
-        ? `
-          <a href="${esc(p.screenshot)}" target="_blank">
-            <img class="screenshot-preview" src="${esc(p.screenshot)}" loading="lazy" alt="Screenshot ${esc(p.site)}">
-          </a>
-        `
+        ? `<a href="${esc(p.screenshot)}" target="_blank"><img class="screenshot-preview" src="${esc(p.screenshot)}" loading="lazy" alt="Screenshot ${esc(p.site)}"></a>`
         : `<div class="no-preview">Geen screenshot beschikbaar</div>`;
+
+      const rtHtml = p.responseTimeMs != null
+        ? `<span class="rt-badge ${responseTimeClass(p.responseTimeMs)}">${formatMs(p.responseTimeMs)}</span>`
+        : "";
 
       return `
         <tr class="page-row page-of-${siteIndex}" style="display:none" data-status="${esc(p.status)}">
@@ -786,20 +544,18 @@ async function checkPage(browser, contextOptions, site, path) {
           </td>
           <td><span class="badge badge-${esc(p.status)}">${esc(p.status)}</span></td>
           <td>${p.details.map(d => `<div>${esc(d)}</div>`).join("")}</td>
+          <td>${rtHtml}</td>
           <td>${esc(p.checkedAt)}</td>
           <td class="num">
             <button class="secondary" type="button" onclick="togglePageDetails('${siteIndex}-${pageIndex}')">Details</button>
           </td>
         </tr>
-
         <tr id="page-details-${siteIndex}-${pageIndex}" class="page-detail-row page-of-${siteIndex}" style="display:none">
-          <td colspan="5">
+          <td colspan="6">
             <div class="detail-box">
               <div>
                 <label>Pagina controle</label>
-                <div class="hint">
-                  ${p.details.map(d => `<div>• ${esc(d)}</div>`).join("")}
-                </div>
+                <div class="hint">${p.details.map(d => `<div>• ${esc(d)}</div>`).join("")}</div>
                 ${screenshotHtml}
               </div>
               <div>
@@ -808,9 +564,16 @@ async function checkPage(browser, contextOptions, site, path) {
               </div>
             </div>
           </td>
-        </tr>
-      `;
+        </tr>`;
     }).join("");
+
+    const rtBadge = site.avgResponseMs != null
+      ? `<span class="rt-badge ${responseTimeClass(site.avgResponseMs)}" title="Gemiddelde laadtijd">${formatMs(site.avgResponseMs)}</span>`
+      : "";
+
+    const uptimeHtml = uptime != null
+      ? `<span class="uptime-pct ${uptime === 100 ? "positive" : uptime >= 90 ? "warning" : "danger"}">${uptime}%</span>`
+      : "";
 
     return `
       <tr class="website-row ${esc(site.status)}" data-index="${siteIndex}" data-status="${esc(site.status)}" data-site="${esc(site.name.toLowerCase())}">
@@ -823,15 +586,21 @@ async function checkPage(browser, contextOptions, site, path) {
           <span class="tag positive">${site.ok} OK</span>
           <span class="tag warning">${site.warning} warnings</span>
           <span class="tag danger">${site.error} errors</span>
-          <span class="tag">${site.total} pagina’s</span>
+          <span class="tag">${site.total} pag.</span>
+        </td>
+        <td>${rtBadge}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${uptimeBadges}
+            ${uptimeHtml}
+          </div>
         </td>
         <td>${esc(site.lastCheck)}</td>
         <td class="num">
-          <button type="button" onclick="toggleSitePages(${siteIndex})">Pagina’s openen</button>
+          <button type="button" onclick="toggleSitePages(${siteIndex})">Pagina's openen</button>
         </td>
       </tr>
-      ${pageRows}
-    `;
+      ${pageRows}`;
   }).join("");
 
   const problemRows = websites
@@ -840,106 +609,151 @@ async function checkPage(browser, contextOptions, site, path) {
       <div class="status-row">
         <div>
           <strong>${esc(w.name)}</strong>
-          <div class="muted">${w.error} errors · ${w.warning} warnings · ${w.total} pagina’s</div>
+          <div class="muted">${w.error} errors · ${w.warning} warnings · ${w.total} pagina's</div>
         </div>
         <span class="${w.status === "error" ? "danger" : "warning"}">${esc(w.status)}</span>
-      </div>
-    `).join("");
+      </div>`).join("");
 
-  fs.writeFileSync("dashboard/index.html", `
-<!doctype html>
+  return `<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HJ Online Website Monitoring</title>
 <style>
-:root{--bg:#f7fbff;--card:#fff;--text:#111827;--muted:#667085;--line:#e5eef7;--accent:#43bff2;--accent-dark:#1598d0;--accent-soft:#eaf8ff;--shadow:0 18px 45px rgba(17,24,39,.08);--radius:22px;--success:#067647;--success-soft:#e7f8e7;--warning:#b54708;--warning-soft:#fff5cc;--danger:#b42318;--danger-soft:#ffdede}
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-header{padding:32px 28px;background:linear-gradient(135deg,#fff 0%,#eaf8ff 55%,#d7f2ff 100%)}
-header::before{content:"HJ Online";display:inline-flex;margin-bottom:18px;padding:9px 14px;border-radius:999px;background:#fff;color:var(--accent-dark);font-weight:800;box-shadow:0 8px 22px rgba(21,152,208,.16)}
-header h1{margin:0 0 8px;font-size:34px;letter-spacing:-.04em}
-header p{margin:0;opacity:.78;max-width:960px;line-height:1.55}
-main{padding:24px;max-width:1700px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
-.grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:16px;margin-bottom:18px}
-.kpi-title{color:var(--muted);font-size:13px;font-weight:800}
-.kpi-value{font-size:28px;font-weight:900;margin-top:8px}
-.kpi-sub{color:var(--muted);font-size:12px;margin-top:6px}
-.management{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:18px}
-.status-row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:10px 0}
+:root{
+  --bg:#f4f7fb;--card:#fff;--text:#111827;--muted:#667085;--line:#e5eef7;
+  --accent:#1e6eeb;--accent-dark:#1458c8;--accent-soft:#eff4ff;
+  --shadow:0 2px 8px rgba(17,24,39,.07);--radius:16px;
+  --success:#027a48;--success-soft:#ecfdf3;--success-border:#6ce9a6;
+  --warning:#b54708;--warning-soft:#fffaeb;--warning-border:#fec84b;
+  --danger:#b42318;--danger-soft:#fef3f2;--danger-border:#fda29b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+header{padding:28px 32px 24px;background:#fff;border-bottom:1px solid var(--line)}
+.header-top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.logo{display:inline-flex;padding:5px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dark);font-weight:700;font-size:12px;letter-spacing:.04em}
+header h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+header p{color:var(--muted);font-size:13px;max-width:800px;margin-top:4px}
+main{padding:24px 32px;max-width:1600px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.kpi-title{color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.kpi-value{font-size:30px;font-weight:800;margin-top:6px;letter-spacing:-.03em}
+.kpi-sub{color:var(--muted);font-size:11px;margin-top:4px}
+.kpi-value.positive{color:var(--success)}
+.kpi-value.warning{color:var(--warning)}
+.kpi-value.danger{color:var(--danger)}
+.management{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-bottom:20px}
+.status-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:10px 0}
 .status-row:last-child{border-bottom:0}
-.positive{color:var(--success);font-weight:800}
-.warning{color:var(--warning);font-weight:800}
-.danger{color:var(--danger);font-weight:800}
-.muted{color:var(--muted);font-size:13px;margin-top:4px}
-.hint{color:var(--muted);font-size:13px;line-height:1.5}
-.toolbar{display:grid;grid-template-columns:1fr 210px 210px;gap:12px;margin-bottom:12px}
-input,select{width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff;color:var(--text);outline:none}
-button,.button-link{border:0;border-radius:999px;padding:10px 16px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(67,191,242,.28);text-decoration:none;display:inline-flex}
+.positive{color:var(--success);font-weight:700}
+.warning{color:var(--warning);font-weight:700}
+.danger{color:var(--danger);font-weight:700}
+.muted{color:var(--muted);font-size:12px;margin-top:2px}
+.hint{color:var(--muted);font-size:13px;line-height:1.6}
+.toolbar{display:grid;grid-template-columns:1fr 180px 180px;gap:10px;margin-bottom:14px}
+input,select{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:#fff;color:var(--text);outline:none;font-size:13px}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,110,235,.1)}
+button,.button-link{border:0;border-radius:999px;padding:8px 14px;background:var(--accent);color:#fff;font-weight:600;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:background .15s}
 button:hover,.button-link:hover{background:var(--accent-dark)}
 button.secondary,.secondary-link{background:var(--accent-soft);color:var(--accent-dark);box-shadow:none}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+h3{font-size:15px;font-weight:700;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px}
 .num{text-align:right;white-space:nowrap}
-.customer{font-weight:800}
-tr:hover td{background:var(--accent-soft)}
-.badge,.tag{display:inline-flex;border-radius:999px;padding:5px 10px;font-weight:900;font-size:12px;text-transform:uppercase;margin:2px}
-.badge-ok,.tag.positive{background:var(--success-soft);color:var(--success)}
-.badge-warning,.tag.warning{background:var(--warning-soft);color:var(--warning)}
-.badge-error,.tag.danger{background:var(--danger-soft);color:var(--danger)}
-.tag{background:var(--accent-soft);color:var(--accent-dark)}
+.customer{font-weight:600;font-size:13px}
+tr:hover td{background:#fafcff}
+.badge,.tag{display:inline-flex;border-radius:999px;padding:3px 9px;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:1px}
+.badge-ok,.tag.positive{background:var(--success-soft);color:var(--success);border:1px solid var(--success-border)}
+.badge-warning,.tag.warning{background:var(--warning-soft);color:var(--warning);border:1px solid var(--warning-border)}
+.badge-error,.tag.danger{background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger-border)}
+.tag{background:var(--accent-soft);color:var(--accent-dark);border:1px solid rgba(30,110,235,.2)}
 .website-row.error td{background:#fffafa}
 .website-row.warning td{background:#fffdf5}
-.page-row td{background:#fff;font-size:13px}
-.page-indent{padding-left:26px;border-left:4px solid var(--accent-soft)}
-.page-detail-row td{background:#fff!important}
-.detail-box{display:grid;grid-template-columns:1fr 320px;gap:18px;padding:18px;border:1px solid var(--line);border-radius:18px;background:#fff}
-label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}
-.screenshot-preview{width:100%;max-height:260px;object-fit:cover;border:1px solid var(--line);border-radius:16px;background:#fff}
-.no-screenshot,.no-preview{display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:16px;background:#fff;color:var(--muted);font-size:13px;padding:18px;min-height:72px}
-.no-preview{min-height:180px}
+.page-row td{background:#fff;font-size:12px}
+.page-indent{padding-left:24px;border-left:3px solid var(--accent-soft)}
+.page-detail-row td{background:#fafcff!important}
+.detail-box{display:grid;grid-template-columns:1fr 300px;gap:16px;padding:16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.screenshot-preview{width:100%;max-height:220px;object-fit:cover;border:1px solid var(--line);border-radius:10px}
+.no-screenshot,.no-preview{display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:12px;padding:14px;min-height:60px}
+.no-preview{min-height:150px}
 .table-wrap{overflow:auto}
-.empty{padding:36px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:#fff;display:none}
-@media(max-width:1100px){.grid,.management,.toolbar,.detail-box{grid-template-columns:1fr}main{padding:14px}}
+.empty{padding:32px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px;display:none}
+
+/* Response time badges */
+.rt-badge{display:inline-flex;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.rt-fast{background:#ecfdf3;color:#027a48}
+.rt-medium{background:#fffaeb;color:#b54708}
+.rt-slow{background:#fef3f2;color:#b42318}
+
+/* Uptime */
+.uptime-pct{font-size:11px;font-weight:700;margin-left:4px}
+
+@media(max-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}.management,.toolbar{grid-template-columns:1fr}main,header{padding:16px}}
+@media(max-width:640px){.grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <header>
+  <div class="header-top">
+    <span class="logo">HJ Online</span>
+  </div>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Wordfence/403-blokkades vanuit GitHub worden genegeerd als normale bezoekers de site kunnen zien.</p>
+  <p>Automatische controle van WordPress- en WooCommerce-websites. Bijgewerkt op ${esc(lastCheck)}.</p>
 </header>
 
 <main>
   <section class="grid">
-    <div class="card"><div class="kpi-title">Websites</div><div class="kpi-value">${totalWebsites}</div><div class="kpi-sub">Unieke websites</div></div>
-    <div class="card"><div class="kpi-title">Pagina checks</div><div class="kpi-value">${totalPages}</div><div class="kpi-sub">Menu/core pagina’s</div></div>
-    <div class="card"><div class="kpi-title">OK websites</div><div class="kpi-value positive">${okWebsites}</div><div class="kpi-sub">Alles groen</div></div>
-    <div class="card"><div class="kpi-title">Warnings</div><div class="kpi-value warning">${warningWebsites}</div><div class="kpi-sub">Aandacht nodig</div></div>
-    <div class="card"><div class="kpi-title">Errors</div><div class="kpi-value danger">${errorWebsites}</div><div class="kpi-sub">Direct controleren</div></div>
+    <div class="card">
+      <div class="kpi-title">Websites</div>
+      <div class="kpi-value">${totalWebsites}</div>
+      <div class="kpi-sub">Actief gemonitord</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">Pagina checks</div>
+      <div class="kpi-value">${totalPages}</div>
+      <div class="kpi-sub">Menu/core pagina's</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">OK</div>
+      <div class="kpi-value positive">${okWebsites}</div>
+      <div class="kpi-sub">Alles groen</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">Warnings</div>
+      <div class="kpi-value warning">${warningWebsites}</div>
+      <div class="kpi-sub">Aandacht nodig</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">Errors</div>
+      <div class="kpi-value danger">${errorWebsites}</div>
+      <div class="kpi-sub">Direct controleren</div>
+    </div>
   </section>
 
   <section class="management">
     <div class="card">
       <h3>Managementsamenvatting</h3>
       <div class="status-row"><strong>Laatste controle</strong><span>${esc(lastCheck)}</span></div>
-      <div class="status-row"><strong>Algemene status</strong><span class="${errorWebsites ? "danger" : warningWebsites ? "warning" : "positive"}">${errorWebsites ? "Errors gevonden" : warningWebsites ? "Warnings gevonden" : "Alles lijkt goed"}</span></div>
-      <div class="status-row"><strong>Structuur</strong><span>${totalWebsites} websites · ${totalPages} pagina’s</span></div>
+      <div class="status-row"><strong>Algemene status</strong><span class="${errorWebsites ? "danger" : warningWebsites ? "warning" : "positive"}">${errorWebsites ? "Errors gevonden — direct actie vereist" : warningWebsites ? "Waarschuwingen aanwezig" : "Alles lijkt goed"}</span></div>
+      <div class="status-row"><strong>Structuur</strong><span>${totalWebsites} websites · ${totalPages} pagina's</span></div>
+      ${avgResponse != null ? `<div class="status-row"><strong>Gem. laadtijd</strong><span class="rt-badge ${responseTimeClass(avgResponse)}">${formatMs(avgResponse)}</span></div>` : ""}
     </div>
 
     <div class="card">
       <h3>Controle & aandachtspunten</h3>
-      <p class="hint">Klik op “Pagina’s openen” om per website de menu/core-pagina’s te bekijken.</p>
       ${problemRows || `<div class="status-row"><strong>Geen aandachtspunten</strong><span class="positive">Alle websites zijn groen</span></div>`}
     </div>
   </section>
 
   <section class="card">
     <h3>Websites</h3>
-    <p class="hint">Eerst zie je websites. Klap een website uit voor gevonden menu/core-pagina’s, details en screenshots.</p>
+    <p class="hint" style="margin-bottom:14px">Klap een website uit voor pagina's, details en screenshots. De gekleurde balkjes tonen de status van de laatste 14 checks.</p>
 
     <div class="toolbar">
       <input id="searchInput" type="text" placeholder="Zoeken op website of URL..." oninput="filterRows()">
@@ -962,7 +776,9 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
           <tr>
             <th>Website</th>
             <th>Status</th>
-            <th>Pagina’s</th>
+            <th>Pagina's</th>
+            <th>Laadtijd</th>
+            <th>Uptime (14 checks)</th>
             <th>Laatste check</th>
             <th class="num">Details</th>
           </tr>
@@ -979,85 +795,129 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
 
 <script>
 function toggleSitePages(siteIndex) {
-  const pageRows = document.querySelectorAll(".page-of-" + siteIndex);
-  const first = pageRows[0];
+  const rows = document.querySelectorAll(".page-of-" + siteIndex);
+  const first = rows[0];
   if (!first) return;
-
-  const shouldOpen = first.style.display === "none";
-
-  pageRows.forEach(row => {
-    if (row.classList.contains("page-detail-row")) {
-      row.style.display = "none";
-    } else {
-      row.style.display = shouldOpen ? "table-row" : "none";
-    }
+  const open = first.style.display === "none";
+  rows.forEach(row => {
+    if (row.classList.contains("page-detail-row")) row.style.display = "none";
+    else row.style.display = open ? "table-row" : "none";
   });
 }
 
 function togglePageDetails(id) {
   const row = document.getElementById("page-details-" + id);
-  if (!row) return;
-  row.style.display = row.style.display === "none" ? "table-row" : "none";
+  if (row) row.style.display = row.style.display === "none" ? "table-row" : "none";
 }
 
 function filterRows() {
   const q = document.getElementById("searchInput").value.toLowerCase();
   const status = document.getElementById("statusFilter").value;
-  const websiteRows = document.querySelectorAll(".website-row");
+  const rows = document.querySelectorAll(".website-row");
   let visible = 0;
-
-  websiteRows.forEach(row => {
-    const matchesSearch =
-      row.dataset.site.includes(q) ||
-      row.innerText.toLowerCase().includes(q);
-
-    const matchesStatus = !status || row.dataset.status === status;
-    const show = matchesSearch && matchesStatus;
-
-    row.style.display = show ? "table-row" : "none";
-
-    const siteIndex = row.dataset.index;
-    document.querySelectorAll(".page-of-" + siteIndex).forEach(pageRow => {
-      pageRow.style.display = "none";
-    });
-
-    if (show) visible++;
+  rows.forEach(row => {
+    const match = (row.dataset.site.includes(q) || row.innerText.toLowerCase().includes(q)) &&
+                  (!status || row.dataset.status === status);
+    row.style.display = match ? "table-row" : "none";
+    document.querySelectorAll(".page-of-" + row.dataset.index).forEach(p => p.style.display = "none");
+    if (match) visible++;
   });
-
   document.getElementById("emptyState").style.display = visible ? "none" : "block";
 }
 
 function sortRows() {
   const mode = document.getElementById("sortFilter").value;
   const tbody = document.getElementById("tableBody");
-  const websiteRows = Array.from(tbody.querySelectorAll(".website-row"));
-  const statusRank = { error: 0, warning: 1, ok: 2 };
-
-  websiteRows.sort((a, b) => {
-    if (mode === "status") {
-      return statusRank[a.dataset.status] - statusRank[b.dataset.status];
-    }
-    if (mode === "site") {
-      return a.dataset.site.localeCompare(b.dataset.site);
-    }
+  const rows = Array.from(tbody.querySelectorAll(".website-row"));
+  const rank = { error: 0, warning: 1, ok: 2 };
+  rows.sort((a, b) => {
+    if (mode === "status") return rank[a.dataset.status] - rank[b.dataset.status];
+    if (mode === "site") return a.dataset.site.localeCompare(b.dataset.site);
     return Number(a.dataset.index) - Number(b.dataset.index);
   });
-
-  websiteRows.forEach(row => {
-    const siteIndex = row.dataset.index;
-    const relatedPages = Array.from(document.querySelectorAll(".page-of-" + siteIndex));
-
+  rows.forEach(row => {
+    const related = Array.from(document.querySelectorAll(".page-of-" + row.dataset.index));
     tbody.appendChild(row);
-    relatedPages.forEach(p => {
-      p.style.display = "none";
-      tbody.appendChild(p);
-    });
+    related.forEach(p => { p.style.display = "none"; tbody.appendChild(p); });
   });
-
   filterRows();
 }
 </script>
 </body>
-</html>
-`);
+</html>`;
+}
+
+// ─── Main ──────────────────────────────────────────────────────────────────────
+
+(async () => {
+  fs.mkdirSync("dashboard", { recursive: true });
+
+  const history = loadHistory();
+  const browser = await chromium.launch();
+  const requestContext = await request.newContext();
+  const tasks = [];
+
+  for (const site of config.sites || []) {
+    let pages = ["/"];
+    try {
+      if (site.sitemap === "menu") {
+        pages = await getMenuUrls(browser, site);
+      } else if (site.sitemap) {
+        pages = await getSitemapUrls(requestContext, site);
+      } else {
+        pages = site.pages || ["/"];
+      }
+      if (!pages || pages.length === 0) pages = site.pages || ["/"];
+    } catch (e) {
+      console.log("Pagina detectie fout bij:", site.name, e.message);
+      pages = site.pages || ["/"];
+    }
+    for (const path of pages) {
+      tasks.push(() => checkPage(browser, site, path));
+    }
+  }
+
+  const results = await runParallel(tasks, CONCURRENCY);
+
+  await requestContext.dispose();
+  await browser.close();
+
+  // Group results by site
+  const grouped = {};
+  for (const r of results) {
+    if (!grouped[r.site]) grouped[r.site] = { name: r.site, siteUrl: r.siteUrl, pages: [] };
+    grouped[r.site].pages.push(r);
+  }
+
+  const websites = Object.values(grouped).map(site => {
+    const hasError = site.pages.some(p => p.status === "error");
+    const hasWarning = site.pages.some(p => p.status === "warning");
+    const times = site.pages.map(p => p.responseTimeMs).filter(t => t != null);
+    const avgResponseMs = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null;
+
+    return {
+      ...site,
+      status: hasError ? "error" : hasWarning ? "warning" : "ok",
+      ok: site.pages.filter(p => p.status === "ok").length,
+      warning: site.pages.filter(p => p.status === "warning").length,
+      error: site.pages.filter(p => p.status === "error").length,
+      total: site.pages.length,
+      lastCheck: site.pages[site.pages.length - 1]?.checkedAt || "",
+      avgResponseMs
+    };
+  });
+
+  // Update and save history
+  const updatedHistory = updateHistory(history, websites);
+  saveHistory(updatedHistory);
+
+  // Create GitHub issue if needed
+  await createOrUpdateVisitorIssue(results, websites);
+
+  // Write dashboard
+  const html = buildDashboard(websites, updatedHistory);
+  fs.writeFileSync("dashboard/index.html", html);
+
+  console.log(`\n✅ Dashboard klaar — ${websites.length} websites, ${results.length} pagina checks`);
+  console.log(`   OK: ${websites.filter(w => w.status === "ok").length} | Warnings: ${websites.filter(w => w.status === "warning").length} | Errors: ${websites.filter(w => w.status === "error").length}`);
 })();
