@@ -209,8 +209,8 @@ const contextOptions = {
   viewport: { width: 1280, height: 800 },
   extraHTTPHeaders: {
     "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Cache-Control": "no-cache"
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    // Cache-Control weggelaten: dit veroorzaakte CORS-errors op Google Fonts / gstatic voor alle sites
   }
 };
 
@@ -424,8 +424,22 @@ async function checkPage(browser, site, path) {
 
       await runFrontendHealthChecks(page, site, details);
 
-      const failedCss = failedAssets.filter(a => a.type === "stylesheet");
-      const failedJs = failedAssets.filter(a => a.type === "script");
+      // Externe CDN-domeinen die geen echte bezoekersproblemen zijn
+      const ignoredAssetDomains = [
+        "fonts.gstatic.com",
+        "fonts.googleapis.com",
+        "gstatic.com",
+        "recaptcha",
+        "google-analytics.com",
+        "googletagmanager.com",
+        "hotjar.com",
+        "facebook.net",
+        "doubleclick.net"
+      ];
+      const isIgnoredAsset = url => ignoredAssetDomains.some(d => url.includes(d));
+
+      const failedCss = failedAssets.filter(a => a.type === "stylesheet" && !isIgnoredAsset(a.url));
+      const failedJs  = failedAssets.filter(a => a.type === "script"     && !isIgnoredAsset(a.url));
 
       if (failedCss.length > 0) {
         status = "error";
@@ -434,7 +448,20 @@ async function checkPage(browser, site, path) {
       if (failedJs.length > 0)
         details.push("Javascript bestand laadt niet: " + failedJs.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
 
-      const filteredErrors = errors.filter(e => !e.includes("403") && !e.includes("favicon") && !e.includes("Failed to load resource"));
+      const filteredErrors = errors.filter(e =>
+        !e.includes("403") &&
+        !e.includes("favicon") &&
+        !e.includes("Failed to load resource") &&
+        !e.includes("fonts.gstatic.com") &&
+        !e.includes("fonts.googleapis.com") &&
+        !e.includes("gstatic.com") &&
+        !e.includes("CORS") &&
+        !e.includes("recaptcha") &&
+        !e.includes("google-analytics") &&
+        !e.includes("googletagmanager") &&
+        !e.includes("hotjar") &&
+        !e.includes("facebook")
+      );
       if (filteredErrors.length > 0)
         details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
 
@@ -444,10 +471,10 @@ async function checkPage(browser, site, path) {
         d.includes("Belangrijke selector ontbreekt")
       )) status = "error";
 
-      // Response time warning (but don't override error)
-      if (responseTimeMs > 4000 && status === "ok") {
+      // Trage laadtijd: waarschuw bij > 3s (Google's grens voor mobiele SEO)
+      if (responseTimeMs > 3000 && status !== "error") {
         status = "warning";
-        details.push(`Trage laadtijd: ${formatMs(responseTimeMs)}. Klanten kunnen dit als traag ervaren.`);
+        details.push(`Trage laadtijd: ${formatMs(responseTimeMs)}. Google adviseert onder de 3 seconden voor goede SEO-ranking.`);
       }
     }
 
