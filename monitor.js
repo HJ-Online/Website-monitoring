@@ -50,6 +50,12 @@ function isVisitorVisibleProblem(result) {
     "http fout",
     "tekst ontbreekt",
     "knop/tekst ontbreekt",
+    "css bestand laadt niet",
+    "javascript bestand laadt niet",
+    "pagina lijkt niet goed gestyled",
+    "te weinig zichtbare tekst",
+    "te weinig afbeeldingen",
+    "belangrijke selector ontbreekt",
     "page.goto",
     "navigation"
   ];
@@ -144,7 +150,7 @@ ${r.details.map(d => `- ${d}`).join("\n")}
 
 ---
 
-Deze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, timeouts, ontbrekende verplichte content of ontbrekende belangrijke knoppen.
+Deze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, timeouts, ontbrekende content, ontbrekende belangrijke knoppen of kapotte frontend/CSS/layout.
 `;
 
   if (existingIssue) {
@@ -337,14 +343,99 @@ async function runParallel(tasks, limit) {
   return results;
 }
 
+async function runFrontendHealthChecks(page, site, details) {
+  const health = await page.evaluate(() => {
+    const bodyText = document.body?.innerText?.replace(/\s+/g, " ").trim() || "";
+    const visibleImages = Array.from(document.images).filter(img => {
+      const rect = img.getBoundingClientRect();
+      const style = window.getComputedStyle(img);
+      return rect.width > 30 && rect.height > 30 && style.display !== "none" && style.visibility !== "hidden";
+    }).length;
+
+    const visibleButtons = Array.from(document.querySelectorAll("a, button, input[type='submit']")).filter(el => {
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return rect.width > 20 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+    }).length;
+
+    const stylesheets = Array.from(document.styleSheets || []).length;
+    const bodyBg = window.getComputedStyle(document.body).backgroundColor;
+    const fontFamily = window.getComputedStyle(document.body).fontFamily;
+
+    return {
+      textLength: bodyText.length,
+      visibleImages,
+      visibleButtons,
+      stylesheets,
+      bodyBg,
+      fontFamily
+    };
+  });
+
+  const minTextLength = Number(site.minTextLength || 250);
+  const minImages = Number(site.minImages ?? 1);
+  const minButtons = Number(site.minButtons ?? 1);
+
+  if (health.textLength < minTextLength) {
+    details.push(`Te weinig zichtbare tekst (${health.textLength} tekens). Mogelijk kapotte frontend.`);
+  }
+
+  if (health.visibleImages < minImages) {
+    details.push(`Te weinig afbeeldingen zichtbaar (${health.visibleImages}). Mogelijk laden afbeeldingen/layout niet goed.`);
+  }
+
+  if (health.visibleButtons < minButtons) {
+    details.push(`Te weinig knoppen/links zichtbaar (${health.visibleButtons}). Mogelijk menu of CTA kapot.`);
+  }
+
+  if (health.stylesheets === 0) {
+    details.push("Pagina lijkt niet goed gestyled: geen stylesheets actief.");
+  }
+
+  for (const selector of site.requiredSelectors || []) {
+    const exists = await page.locator(selector).first().count();
+
+    if (!exists) {
+      details.push("Belangrijke selector ontbreekt: " + selector);
+    }
+  }
+}
+
 async function checkPage(browser, contextOptions, site, path) {
   const url = site.url.replace(/\/$/, "") + path;
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   const errors = [];
+  const failedAssets = [];
 
   page.on("console", msg => {
     if (msg.type() === "error") errors.push(msg.text());
+  });
+
+  page.on("response", response => {
+    const resourceType = response.request().resourceType();
+    const status = response.status();
+    const assetUrl = response.url();
+
+    if (["stylesheet", "script"].includes(resourceType) && status >= 400) {
+      failedAssets.push({
+        type: resourceType,
+        status,
+        url: assetUrl
+      });
+    }
+  });
+
+  page.on("requestfailed", request => {
+    const resourceType = request.resourceType();
+
+    if (["stylesheet", "script", "image"].includes(resourceType)) {
+      failedAssets.push({
+        type: resourceType,
+        status: "failed",
+        url: request.url()
+      });
+    }
   });
 
   let status = "ok";
@@ -357,6 +448,8 @@ async function checkPage(browser, contextOptions, site, path) {
       waitUntil: "domcontentloaded",
       timeout: 20000
     });
+
+    await page.waitForTimeout(1500);
 
     const httpStatus = response?.status();
 
@@ -388,6 +481,20 @@ async function checkPage(browser, contextOptions, site, path) {
           details.push("Knop/tekst ontbreekt: " + buttonText);
         }
       }
+
+      await runFrontendHealthChecks(page, site, details);
+    }
+
+    const failedCss = failedAssets.filter(a => a.type === "stylesheet");
+    const failedJs = failedAssets.filter(a => a.type === "script");
+
+    if (failedCss.length > 0) {
+      status = "error";
+      details.push("CSS bestand laadt niet: " + failedCss.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
+    }
+
+    if (failedJs.length > 0) {
+      details.push("Javascript bestand laadt niet: " + failedJs.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
     }
 
     const filteredErrors = errors.filter(e =>
@@ -398,6 +505,16 @@ async function checkPage(browser, contextOptions, site, path) {
 
     if (filteredErrors.length > 0) {
       details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
+    }
+
+    if (details.some(d =>
+      d.includes("Te weinig zichtbare tekst") ||
+      d.includes("Te weinig afbeeldingen") ||
+      d.includes("Te weinig knoppen") ||
+      d.includes("Pagina lijkt niet goed gestyled") ||
+      d.includes("Belangrijke selector ontbreekt")
+    )) {
+      status = "error";
     }
 
     const shouldTakeScreenshot = status !== "ok" || path === "/";
@@ -448,8 +565,10 @@ async function checkPage(browser, contextOptions, site, path) {
 
   const contextOptions = {
     userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    viewport: { width: 1440, height: 1200 },
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
     extraHTTPHeaders: {
       "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8"
     }
