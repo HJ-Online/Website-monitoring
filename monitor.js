@@ -40,7 +40,8 @@ function isVisitorVisibleProblem(result) {
     "cdn",
     "console meldingen",
     "favicon",
-    "failed to load resource"
+    "failed to load resource",
+    "github-monitor geblokkeerd"
   ];
 
   const visitorSignals = [
@@ -545,6 +546,7 @@ async function checkPage(browser, contextOptions, site, path) {
   const details = [];
   const screenshotName = `${safeFileName(site.name + "-" + path)}.png`;
   let screenshot = null;
+  let skipFrontendChecks = false;
 
   try {
     const response = await page.goto(url, {
@@ -560,17 +562,18 @@ async function checkPage(browser, contextOptions, site, path) {
       status = "error";
       details.push("Geen response ontvangen");
     } else if (httpStatus === 403) {
-      status = "warning";
-      details.push("403 blokkade door beveiliging. Site werkt waarschijnlijk wel voor normale bezoekers.");
+      status = "ok";
+      skipFrontendChecks = true;
+      details.push("GitHub-monitor geblokkeerd door Wordfence/beveiliging (403). Genegeerd omdat normale bezoekers de site kunnen zien.");
     } else if (httpStatus >= 400) {
       status = "error";
       details.push("HTTP fout: " + httpStatus);
     }
 
-    const html = await page.content();
-    const htmlLower = html.toLowerCase();
+    if (!skipFrontendChecks) {
+      const html = await page.content();
+      const htmlLower = html.toLowerCase();
 
-    if (httpStatus !== 403) {
       for (const text of site.requiredText || []) {
         if (!htmlLower.includes(text.toLowerCase())) {
           status = "error";
@@ -586,43 +589,43 @@ async function checkPage(browser, contextOptions, site, path) {
       }
 
       await runFrontendHealthChecks(page, site, details);
-    }
 
-    const failedCss = failedAssets.filter(a => a.type === "stylesheet");
-    const failedJs = failedAssets.filter(a => a.type === "script");
+      const failedCss = failedAssets.filter(a => a.type === "stylesheet");
+      const failedJs = failedAssets.filter(a => a.type === "script");
 
-    if (failedCss.length > 0) {
-      status = "error";
-      details.push("CSS bestand laadt niet: " + failedCss.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
-    }
+      if (failedCss.length > 0) {
+        status = "error";
+        details.push("CSS bestand laadt niet: " + failedCss.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
+      }
 
-    if (failedJs.length > 0) {
-      details.push("Javascript bestand laadt niet: " + failedJs.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
-    }
+      if (failedJs.length > 0) {
+        details.push("Javascript bestand laadt niet: " + failedJs.slice(0, 2).map(a => `${a.status} ${a.url}`).join(" | "));
+      }
 
-    const filteredErrors = errors.filter(e =>
-      !e.includes("403") &&
-      !e.includes("favicon") &&
-      !e.includes("Failed to load resource")
-    );
+      const filteredErrors = errors.filter(e =>
+        !e.includes("403") &&
+        !e.includes("favicon") &&
+        !e.includes("Failed to load resource")
+      );
 
-    if (filteredErrors.length > 0) {
-      details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
-    }
+      if (filteredErrors.length > 0) {
+        details.push("Console meldingen: " + filteredErrors.slice(0, 3).join(" | "));
+      }
 
-    if (details.some(d =>
-      d.includes("Te weinig zichtbare tekst") ||
-      d.includes("Te weinig afbeeldingen") ||
-      d.includes("Te weinig knoppen") ||
-      d.includes("Pagina lijkt niet goed gestyled") ||
-      d.includes("Belangrijke selector ontbreekt")
-    )) {
-      status = "error";
+      if (details.some(d =>
+        d.includes("Te weinig zichtbare tekst") ||
+        d.includes("Te weinig afbeeldingen") ||
+        d.includes("Te weinig knoppen") ||
+        d.includes("Pagina lijkt niet goed gestyled") ||
+        d.includes("Belangrijke selector ontbreekt")
+      )) {
+        status = "error";
+      }
     }
 
     const shouldTakeScreenshot = status !== "ok" || path === "/";
 
-    if (shouldTakeScreenshot) {
+    if (shouldTakeScreenshot && !skipFrontendChecks) {
       await page.screenshot({
         path: `dashboard/${screenshotName}`,
         fullPage: true
@@ -761,7 +764,7 @@ async function checkPage(browser, contextOptions, site, path) {
         : `
           <div class="actions">
             <a class="button-link" href="${esc(p.url)}" target="_blank">Pagina openen</a>
-            <span class="no-screenshot">Geen screenshot nodig bij OK-pagina</span>
+            <span class="no-screenshot">Geen screenshot beschikbaar of niet nodig</span>
           </div>
         `;
 
@@ -907,7 +910,7 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
 <body>
 <header>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Pagina’s worden automatisch uit de sitemap gehaald wanneer sitemap: true aanstaat.</p>
+  <p>Automatische controle van WordPress- en WooCommerce-websites. Wordfence/403-blokkades vanuit GitHub worden genegeerd als normale bezoekers de site kunnen zien.</p>
 </header>
 
 <main>
