@@ -1,4 +1,4 @@
-const { chromium, request } = require("playwright");
+const { chromium } = require("playwright");
 const fs = require("fs");
 const yaml = require("js-yaml");
 
@@ -26,12 +26,12 @@ async function runParallel(tasks, limit) {
   return results;
 }
 
-// MAIN CHECK
+// PAGE CHECK
 async function checkPage(browser, contextOptions, site, path) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
 
-  // 🔥 STEALTH FIX
+  // STEALTH
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
     window.chrome = { runtime: {} };
@@ -51,12 +51,10 @@ async function checkPage(browser, contextOptions, site, path) {
       timeout: 20000
     });
 
-    // 🔥 menselijk gedrag
     await page.waitForTimeout(2000 + Math.random() * 2000);
 
     const httpStatus = response?.status();
 
-    // ❌ echte errors
     if (!response) {
       status = "error";
       details.push("Geen response");
@@ -68,14 +66,13 @@ async function checkPage(browser, contextOptions, site, path) {
       details.push("HTTP fout: " + httpStatus);
     }
 
-    // ⚠️ Wordfence blokkade
     let blocked = false;
     if (httpStatus === 403) {
       blocked = true;
-      details.push("Wordfence blokkeert monitoring (403)");
+      details.push("Wordfence blokkeert monitoring (403) → genegeerd");
     }
 
-    // 🔍 FRONTEND CHECKS (alleen als niet geblokkeerd)
+    // FRONTEND CHECKS
     if (!blocked) {
       const text = await page.textContent("body") || "";
 
@@ -90,23 +87,17 @@ async function checkPage(browser, contextOptions, site, path) {
         details.push("Geen knoppen/menu zichtbaar");
       }
 
-      const images = await page.$$eval("img", els => els.length);
-      if (images < 1) {
-        details.push("Weinig afbeeldingen zichtbaar");
-      }
-
-      // CSS check
       const hasCSS = await page.evaluate(() => {
         return document.styleSheets.length > 0;
       });
 
       if (!hasCSS) {
         status = "error";
-        details.push("CSS niet geladen → layout kapot");
+        details.push("CSS niet geladen (layout kapot)");
       }
     }
 
-    // 📸 screenshot alleen bij error of homepage
+    // SCREENSHOT
     if (status !== "ok" || path === "/") {
       const name = safeFileName(site.name + path) + ".png";
       await page.screenshot({ path: `dashboard/${name}`, fullPage: true });
@@ -138,7 +129,6 @@ async function checkPage(browser, contextOptions, site, path) {
 
   const browser = await chromium.launch();
 
-  // 🔥 REALISTIC BROWSER (BELANGRIJK)
   const contextOptions = {
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -164,8 +154,43 @@ async function checkPage(browser, contextOptions, site, path) {
 
   await browser.close();
 
-  // 📊 Dashboard JSON (simpel gehouden)
+  // JSON
   fs.writeFileSync("dashboard/results.json", JSON.stringify(results, null, 2));
 
-  console.log("Monitoring klaar");
+  // HTML DASHBOARD (FIX VOOR 404)
+  const html = `
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Website Monitoring</title>
+<style>
+body { font-family: Arial; padding: 20px; }
+.ok { color: green; }
+.warning { color: orange; }
+.error { color: red; }
+.card { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Website Monitoring</h1>
+
+${results.map(r => `
+<div class="card">
+  <strong>${r.site}</strong><br>
+  <a href="${r.url}" target="_blank">${r.url}</a><br>
+  Status: <span class="${r.status}">${r.status}</span><br>
+  ${r.details.join("<br>")}
+  ${r.screenshot ? `<br><img src="${r.screenshot}" width="300">` : ""}
+</div>
+`).join("")}
+
+</body>
+</html>
+`;
+
+  fs.writeFileSync("dashboard/index.html", html);
+
+  console.log("Monitoring + dashboard klaar");
 })();
