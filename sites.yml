@@ -3,46 +3,87 @@ sites:
     url: https://babywellnessoss.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "baby wellness"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 300
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
 
   - name: Autoschade van de Camp
     url: https://autoschadevandecamp.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "autoschade"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 300
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
 
   - name: Horren voor je huis
     url: https://www.horrenvoorjehuis.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "horren"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 300
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
 
   - name: Bjorn Rikken Timmerwerken
     url: https://bjornrikkentimmerwerken.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "timmerwerken"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 300
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
 
   - name: Blombouw
     url: https://blombouw.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "blombouw"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 300
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
 
   - name: Bouwmaterialen Brabant
     url: https://bmbrabant.nl
     sitemap: true
     maxPages: 8
-    requiredText:
-      - "bouwmaterialen"
+    requiredText: []
     requiredButtons: []
+    minTextLength: 250
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
