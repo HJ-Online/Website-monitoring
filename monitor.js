@@ -230,6 +230,12 @@ function isUsefulPage(url) {
     "/author/",
     "/portfolio-category/",
     "/project-category/",
+    "/cart/",
+    "/winkelwagen/",
+    "/checkout/",
+    "/afrekenen/",
+    "/my-account/",
+    "/mijn-account/",
     ".jpg",
     ".jpeg",
     ".png",
@@ -242,6 +248,94 @@ function isUsefulPage(url) {
   ];
 
   return !blockedParts.some(part => lower.includes(part));
+}
+
+function sortMenuPaths(paths) {
+  const priority = [
+    "/",
+    "/home/",
+    "/over-ons/",
+    "/over/",
+    "/diensten/",
+    "/service/",
+    "/services/",
+    "/producten/",
+    "/product/",
+    "/assortiment/",
+    "/tarieven/",
+    "/prijzen/",
+    "/cadeaubonnen/",
+    "/reserveren/",
+    "/afspraak-maken/",
+    "/contact/",
+    "/openingstijden/"
+  ];
+
+  return paths.sort((a, b) => {
+    const ai = priority.indexOf(a);
+    const bi = priority.indexOf(b);
+
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+
+    return a.length - b.length;
+  });
+}
+
+async function getMenuUrls(browser, contextOptions, site) {
+  const context = await browser.newContext(contextOptions);
+  const page = await context.newPage();
+  const baseUrl = site.url.replace(/\/$/, "");
+
+  try {
+    await page.goto(baseUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 20000
+    });
+
+    await page.waitForTimeout(2000);
+
+    const links = await page.evaluate(() => {
+      const selectors = [
+        "header a",
+        "nav a",
+        ".menu a",
+        ".main-menu a",
+        ".primary-menu a",
+        ".elementor-nav-menu a",
+        ".elementor-location-header a",
+        ".site-header a",
+        ".navbar a"
+      ];
+
+      const anchors = Array.from(document.querySelectorAll(selectors.join(",")));
+
+      return anchors
+        .map(a => a.href)
+        .filter(Boolean);
+    });
+
+    const menuPaths = uniq(
+      links
+        .map(link => normalizePathFromUrl(link, baseUrl))
+        .filter(Boolean)
+        .filter(isUsefulPage)
+        .map(path => path.endsWith("/") ? path : `${path}/`)
+    );
+
+    const fallbackPages = site.pages || ["/"];
+    const maxPages = Number(site.maxPages || 8);
+    const combined = uniq(["/", ...sortMenuPaths(menuPaths), ...fallbackPages]);
+
+    return combined.slice(0, maxPages);
+  } catch (e) {
+    console.log("Menu detectie mislukt bij:", site.name, e.message);
+    return (site.pages || ["/"]).slice(0, Number(site.maxPages || 8));
+  } finally {
+    await page.close();
+    await context.close();
+  }
 }
 
 async function getSitemapUrls(requestContext, site) {
@@ -346,29 +440,38 @@ async function runParallel(tasks, limit) {
 async function runFrontendHealthChecks(page, site, details) {
   const health = await page.evaluate(() => {
     const bodyText = document.body?.innerText?.replace(/\s+/g, " ").trim() || "";
+
     const visibleImages = Array.from(document.images).filter(img => {
       const rect = img.getBoundingClientRect();
       const style = window.getComputedStyle(img);
-      return rect.width > 30 && rect.height > 30 && style.display !== "none" && style.visibility !== "hidden";
+
+      return (
+        rect.width > 30 &&
+        rect.height > 30 &&
+        style.display !== "none" &&
+        style.visibility !== "hidden"
+      );
     }).length;
 
     const visibleButtons = Array.from(document.querySelectorAll("a, button, input[type='submit']")).filter(el => {
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
-      return rect.width > 20 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+
+      return (
+        rect.width > 20 &&
+        rect.height > 20 &&
+        style.display !== "none" &&
+        style.visibility !== "hidden"
+      );
     }).length;
 
     const stylesheets = Array.from(document.styleSheets || []).length;
-    const bodyBg = window.getComputedStyle(document.body).backgroundColor;
-    const fontFamily = window.getComputedStyle(document.body).fontFamily;
 
     return {
       textLength: bodyText.length,
       visibleImages,
       visibleButtons,
-      stylesheets,
-      bodyBg,
-      fontFamily
+      stylesheets
     };
   });
 
@@ -581,17 +684,19 @@ async function checkPage(browser, contextOptions, site, path) {
     let pages = ["/"];
 
     try {
-      if (site.sitemap) {
+      if (site.sitemap === "menu") {
+        pages = await getMenuUrls(browser, contextOptions, site);
+      } else if (site.sitemap) {
         pages = await getSitemapUrls(requestContext, site);
       } else {
         pages = site.pages || ["/"];
       }
 
       if (!pages || pages.length === 0) {
-        pages = ["/"];
+        pages = site.pages || ["/"];
       }
     } catch (e) {
-      console.log("Sitemap fout bij:", site.name, e.message);
+      console.log("Pagina detectie fout bij:", site.name, e.message);
       pages = site.pages || ["/"];
     }
 
@@ -808,7 +913,7 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
 <main>
   <section class="grid">
     <div class="card"><div class="kpi-title">Websites</div><div class="kpi-value">${totalWebsites}</div><div class="kpi-sub">Unieke websites</div></div>
-    <div class="card"><div class="kpi-title">Pagina checks</div><div class="kpi-value">${totalPages}</div><div class="kpi-sub">Uit sitemap + homepage</div></div>
+    <div class="card"><div class="kpi-title">Pagina checks</div><div class="kpi-value">${totalPages}</div><div class="kpi-sub">Menu/core pagina’s</div></div>
     <div class="card"><div class="kpi-title">OK websites</div><div class="kpi-value positive">${okWebsites}</div><div class="kpi-sub">Alles groen</div></div>
     <div class="card"><div class="kpi-title">Warnings</div><div class="kpi-value warning">${warningWebsites}</div><div class="kpi-sub">Aandacht nodig</div></div>
     <div class="card"><div class="kpi-title">Errors</div><div class="kpi-value danger">${errorWebsites}</div><div class="kpi-sub">Direct controleren</div></div>
@@ -824,14 +929,14 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
 
     <div class="card">
       <h3>Controle & aandachtspunten</h3>
-      <p class="hint">Klik op “Pagina’s openen” om per website de sitemap-pagina’s te bekijken.</p>
+      <p class="hint">Klik op “Pagina’s openen” om per website de menu/core-pagina’s te bekijken.</p>
       ${problemRows || `<div class="status-row"><strong>Geen aandachtspunten</strong><span class="positive">Alle websites zijn groen</span></div>`}
     </div>
   </section>
 
   <section class="card">
     <h3>Websites</h3>
-    <p class="hint">Eerst zie je websites. Klap een website uit voor gevonden pagina’s, details en screenshots.</p>
+    <p class="hint">Eerst zie je websites. Klap een website uit voor gevonden menu/core-pagina’s, details en screenshots.</p>
 
     <div class="toolbar">
       <input id="searchInput" type="text" placeholder="Zoeken op website of URL..." oninput="filterRows()">
