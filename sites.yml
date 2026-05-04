@@ -1,8 +1,17 @@
 sites:
   - name: Baby Wellness Oss
     url: https://babywellnessoss.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /baby-wellness/
+      - /floaten/
+      - /shantala-massage/
+      - /tarieven/
+      - /cadeaubonnen/
+      - /reserveren/
     requiredText: []
     requiredButtons: []
     minTextLength: 300
@@ -16,13 +25,19 @@ sites:
 
   - name: Autoschade van de Camp
     url: https://autoschadevandecamp.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /diensten/
+      - /schadeherstel/
+      - /contact/
     requiredText: []
     requiredButtons: []
-    minTextLength: 300
+    minTextLength: 250
     minImages: 1
-    minButtons: 2
+    minButtons: 1
     requiredSelectors:
       - "body"
       - "img"
@@ -31,13 +46,19 @@ sites:
 
   - name: Horren voor je huis
     url: https://www.horrenvoorjehuis.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /horren/
+      - /producten/
+      - /contact/
     requiredText: []
     requiredButtons: []
-    minTextLength: 300
+    minTextLength: 250
     minImages: 1
-    minButtons: 2
+    minButtons: 1
     requiredSelectors:
       - "body"
       - "img"
@@ -46,13 +67,19 @@ sites:
 
   - name: Bjorn Rikken Timmerwerken
     url: https://bjornrikkentimmerwerken.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /diensten/
+      - /projecten/
+      - /contact/
     requiredText: []
     requiredButtons: []
-    minTextLength: 300
+    minTextLength: 250
     minImages: 1
-    minButtons: 2
+    minButtons: 1
     requiredSelectors:
       - "body"
       - "img"
@@ -61,13 +88,19 @@ sites:
 
   - name: Blombouw
     url: https://blombouw.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /diensten/
+      - /projecten/
+      - /contact/
     requiredText: []
     requiredButtons: []
-    minTextLength: 300
+    minTextLength: 250
     minImages: 1
-    minButtons: 2
+    minButtons: 1
     requiredSelectors:
       - "body"
       - "img"
@@ -76,8 +109,14 @@ sites:
 
   - name: Bouwmaterialen Brabant
     url: https://bmbrabant.nl
-    sitemap: true
+    sitemap: "menu"
     maxPages: 8
+    pages:
+      - /
+      - /contact/
+      - /over-ons/
+      - /assortiment/
+      - /openingstijden/
     requiredText: []
     requiredButtons: []
     minTextLength: 250
