@@ -126,3 +126,25 @@ sites:
       - "body"
       - "a"
       - "header, nav, .elementor-location-header, .site-header"
+
+# ── Nieuwe site toevoegen? Gebruik dit template: ────────────────────────────────
+#
+#  - name: Naam van de klant
+#    url: https://www.jouwklant.nl
+#    sitemap: "menu"          # "menu" detecteert nav-links automatisch
+#    maxPages: 8              # max aantal pagina's om te checken
+#    pages:                   # fallback als menu-detectie mislukt
+#      - /
+#      - /over-ons/
+#      - /diensten/
+#      - /contact/
+#    requiredText: []         # tekst die MOET voorkomen op elke pagina (optioneel)
+#    requiredButtons: []      # knopteksten die aanwezig moeten zijn (optioneel)
+#    minTextLength: 250       # minimale zichtbare tekst per pagina
+#    minImages: 1             # minimum aantal zichtbare afbeeldingen
+#    minButtons: 1            # minimum aantal zichtbare knoppen/links
+#    requiredSelectors:
+#      - "body"
+#      - "img"
+#      - "a"
+#      - "header, nav, .elementor-location-header, .site-header"
