@@ -112,10 +112,21 @@ function isVisitorVisibleProblem(result) {
   return hasVisitorSignal && !onlyIgnored;
 }
 
+/**
+ * Fingerprint based only on stable identifiers: site name, path, and the
+ * first keyword of the error type. Excludes response times and timestamps
+ * so the same structural problem always gets the same hash — but a genuinely
+ * new/different problem gets a new one.
+ */
 function createFingerprint(items) {
   const raw = items
-    .map(r => `${r.site}|${r.path}|${r.status}|${r.details.join("|")}`)
-    .sort().join("\n");
+    .map(r => {
+      const firstDetail = r.details[0] || "";
+      const errorType = firstDetail.split(":")[0].trim().toLowerCase().slice(0, 60);
+      return `${r.site}|${r.path}|${errorType}`;
+    })
+    .sort()
+    .join("\n");
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
@@ -129,6 +140,18 @@ async function findOpenMonitoringIssue(token, repo) {
   return issues.find(i => i.title.startsWith("🚨 Website monitoring: bezoekersprobleem"));
 }
 
+async function addIssueComment(token, repo, issueNumber, body) {
+  const res = await fetch(
+    `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" },
+      body: JSON.stringify({ body })
+    }
+  );
+  return res.status;
+}
+
 async function createOrUpdateVisitorIssue(results, websites) {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
@@ -140,26 +163,56 @@ async function createOrUpdateVisitorIssue(results, websites) {
   const dashboardUrl = process.env.DASHBOARD_URL || "https://hj-online.github.io/Website-monitoring/";
   const fingerprint = createFingerprint(visitorProblems);
   const existingIssue = await findOpenMonitoringIssue(token, repo);
+  const checkedAt = new Date().toLocaleString("nl-NL");
 
-  if (existingIssue?.body?.includes(`monitoring-fingerprint:${fingerprint}`)) {
-    console.log("Zelfde problemen al gemeld. Geen nieuwe issue."); return;
+  // Collect all previously seen fingerprints from issue body AND all comments
+  let seenFingerprints = [];
+  if (existingIssue) {
+    const bodyMatches = [...(existingIssue.body || "").matchAll(/monitoring-fingerprint:([a-f0-9]{64})/g)];
+    seenFingerprints = bodyMatches.map(m => m[1]);
+
+    try {
+      const commentsRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${existingIssue.number}/comments?per_page=100`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } }
+      );
+      if (commentsRes.ok) {
+        const comments = await commentsRes.json();
+        for (const c of comments) {
+          const matches = [...(c.body || "").matchAll(/monitoring-fingerprint:([a-f0-9]{64})/g)];
+          seenFingerprints.push(...matches.map(m => m[1]));
+        }
+      }
+    } catch {}
   }
 
-  const body = `@${GITHUB_USERNAME}\n\n<!-- monitoring-fingerprint:${fingerprint} -->\n\nEr zijn problemen gevonden die waarschijnlijk zichtbaar zijn voor normale websitebezoekers.\n\n## Samenvatting\n\n- Kritieke pagina's: ${visitorProblems.length}\n- Websites met error: ${websites.filter(w => w.status === "error").length}\n- Dashboard: ${dashboardUrl}\n\n## Problemen\n\n${visitorProblems.slice(0, 20).map(r => `### ❌ ${r.site} — ${r.path}\n\n**URL:** ${r.url}\n\n**Details:**\n${r.details.map(d => `- ${d}`).join("\n")}\n\n**Tijd:** ${r.checkedAt}\n`).join("\n---\n")}\n\n---\n\nDeze melding wordt alleen gemaakt bij bezoekersproblemen zoals HTTP-fouten, timeouts, ontbrekende content of kapotte frontend.`;
+  if (seenFingerprints.includes(fingerprint)) {
+    console.log("Zelfde structurele problemen al gemeld. Geen nieuwe notificatie."); return;
+  }
 
-  const method = existingIssue ? "PATCH" : "POST";
-  const url = existingIssue
-    ? `https://api.github.com/repos/${repo}/issues/${existingIssue.number}`
-    : `https://api.github.com/repos/${repo}/issues`;
+  const problemList = visitorProblems.slice(0, 20).map(r =>
+    `### ❌ ${r.site} — ${r.path}\n\n**URL:** ${r.url}\n\n**Details:**\n${r.details.map(d => `- ${d}`).join("\n")}\n\n**Gedetecteerd:** ${r.checkedAt}\n`
+  ).join("\n---\n");
 
-  const res = await fetch(url, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" },
-    body: JSON.stringify({ title: `🚨 Website monitoring: bezoekersprobleem op ${visitorProblems.length} pagina(s)`, body })
-  });
+  if (!existingIssue) {
+    // No open issue — create a new one
+    const body = `@${GITHUB_USERNAME}\n\n<!-- monitoring-fingerprint:${fingerprint} -->\n\nEr zijn problemen gevonden die waarschijnlijk zichtbaar zijn voor normale websitebezoekers.\n\n## Samenvatting\n\n- Kritieke pagina's: ${visitorProblems.length}\n- Websites met error: ${websites.filter(w => w.status === "error").length}\n- Gedetecteerd: ${checkedAt}\n- Dashboard: ${dashboardUrl}\n\n## Problemen\n\n${problemList}\n\n---\n\nSluit dit issue als het probleem opgelost is. De volgende run maakt een nieuw issue aan als er nieuwe problemen zijn.`;
 
-  console.log(existingIssue ? "Issue bijgewerkt." : "Nieuwe issue aangemaakt.", res.status);
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" },
+      body: JSON.stringify({ title: `🚨 Website monitoring: bezoekersprobleem op ${visitorProblems.length} pagina(s)`, body })
+    });
+    console.log("Nieuwe issue aangemaakt.", res.status);
+  } else {
+    // Issue already open — add a comment (comments DO trigger notification emails, PATCH does not)
+    const commentBody = `@${GITHUB_USERNAME}\n\n<!-- monitoring-fingerprint:${fingerprint} -->\n\n## 🔄 Update — ${checkedAt}\n\nNieuwe of gewijzigde problemen gedetecteerd bij de laatste controle.\n\n- Kritieke pagina's: ${visitorProblems.length}\n- Websites met error: ${websites.filter(w => w.status === "error").length}\n- Dashboard: ${dashboardUrl}\n\n## Problemen\n\n${problemList}`;
+
+    const status = await addIssueComment(token, repo, existingIssue.number, commentBody);
+    console.log("Comment toegevoegd aan bestaand issue (notificatie verstuurd).", status);
+  }
 }
+
 
 // ─── URL / page helpers ────────────────────────────────────────────────────────
 
