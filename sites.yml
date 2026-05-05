@@ -1,4 +1,6 @@
 sites:
+  # ── Bestaande klanten ──────────────────────────────────────────────────────────
+
   - name: Baby Wellness Oss
     url: https://babywellnessoss.nl
     sitemap: "menu"
@@ -12,8 +14,6 @@ sites:
       - /tarieven/
       - /cadeaubonnen/
       - /reserveren/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 300
     minImages: 1
     minButtons: 2
@@ -30,13 +30,9 @@ sites:
     pages:
       - /
       - /over-ons/
+      - /diensten/
       - /schadeherstel/
-      - /fotos-werk/
-      - /openingstijden/
-      - /reviews/
       - /contact/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 250
     minImages: 1
     minButtons: 1
@@ -56,8 +52,6 @@ sites:
       - /horren/
       - /producten/
       - /contact/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 250
     minImages: 1
     minButtons: 1
@@ -77,8 +71,6 @@ sites:
       - /diensten/
       - /projecten/
       - /contact/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 250
     minImages: 1
     minButtons: 1
@@ -98,8 +90,6 @@ sites:
       - /diensten/
       - /projecten/
       - /contact/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 250
     minImages: 1
     minButtons: 1
@@ -119,8 +109,6 @@ sites:
       - /over-ons/
       - /assortiment/
       - /openingstijden/
-    requiredText: []
-    requiredButtons: []
     minTextLength: 250
     minImages: 1
     minButtons: 1
@@ -129,24 +117,939 @@ sites:
       - "a"
       - "header, nav, .elementor-location-header, .site-header"
 
-# ── Nieuwe site toevoegen? Gebruik dit template: ────────────────────────────────
-#
-#  - name: Naam van de klant
-#    url: https://www.jouwklant.nl
-#    sitemap: "menu"          # "menu" detecteert nav-links automatisch
-#    maxPages: 8              # max aantal pagina's om te checken
-#    pages:                   # fallback als menu-detectie mislukt
-#      - /
-#      - /over-ons/
-#      - /diensten/
-#      - /contact/
-#    requiredText: []         # tekst die MOET voorkomen op elke pagina (optioneel)
-#    requiredButtons: []      # knopteksten die aanwezig moeten zijn (optioneel)
-#    minTextLength: 250       # minimale zichtbare tekst per pagina
-#    minImages: 1             # minimum aantal zichtbare afbeeldingen
-#    minButtons: 1            # minimum aantal zichtbare knoppen/links
-#    requiredSelectors:
-#      - "body"
-#      - "img"
-#      - "a"
-#      - "header, nav, .elementor-location-header, .site-header"
+  # ── Nieuwe klanten ─────────────────────────────────────────────────────────────
+
+  - name: Buro Beng
+    url: https://burobeng.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /aanbod-2025-2026/
+      - /nieuws/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Kerkzicht Nuland
+    url: https://kerkzichtnuland.nl
+    sitemap: "menu"
+    maxPages: 5
+    pages:
+      - /
+      - /contact/
+    minTextLength: 100
+    minImages: 0
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+
+  - name: Vakantiepark De Maashorst
+    url: https://vakantieparkdemaashorst.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /kamperen/
+      - /veelgestelde-vragen/
+      - /contact/
+    minTextLength: 250
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Compleet Vitality & Healthcare
+    url: https://compleet-vh.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /personal-training/
+      - /gezondheidscheck/
+      - /contact/
+    minTextLength: 250
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Dakservice Totaal
+    url: https://dakservicetotaal.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /diensten/
+      - /reviews/
+      - /contact/
+    minTextLength: 250
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Vriendschap Boskant
+    url: https://devriendschapboskant.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /eten-drinken/
+      - /zalen-catering/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Friettent Boskant
+    url: https://defriettentboskant.nl
+    sitemap: "menu"
+    maxPages: 5
+    pages:
+      - /
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Wildse Hut
+    url: https://dewildsehut.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /feesten-partijen/
+      - /agenda/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Esquare Coaching
+    url: https://esquarecoaching.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Etienne Termont
+    url: https://etiennetermont.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /over-mij/
+      - /diensten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Horse Logistics
+    url: https://horse-logistics.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /tarieven/
+      - /klantreferenties/
+      - /contact/
+    minTextLength: 250
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Gerual Rolluiken & Zonwering
+    url: https://gerual.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /rolluiken/
+      - /zonwering/
+      - /horren/
+      - /contact/
+    minTextLength: 250
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Gradjan Buss Taxi
+    url: https://gradjanbusstaxi.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Hertog Jan Lith
+    url: https://hertogjanlith.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /menukaart/
+      - /reserveren/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Hofmans Oss
+    url: https://hofmansoss.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /transport/
+      - /containerverhuur/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: HPH Metaalhandel
+    url: https://hph-metaalhandel.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /particulier/
+      - /zakelijk/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: J9FTM Football Transfer Management
+    url: https://j9ftm.com
+    sitemap: "menu"
+    maxPages: 5
+    pages:
+      - /
+      - /contact/
+    minTextLength: 100
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+
+  - name: Jorn Bergmans Schilderwerken
+    url: https://jornbergmansschilderwerken.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Betuwse Kers
+    url: https://debetuwsekers.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /over-ons/
+      - /producten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Lemeer Connected
+    url: https://lemeerconnected.com
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Libau Coaching
+    url: https://www.libaucoaching.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /aanbod/
+      - /over-mij/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Maanrover Shop
+    url: https://maanrovershop.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /shop/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: MM Houtwerk
+    url: https://mmhoutwerk.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /producten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Jouw Kledingmaat
+    url: https://www.jouwkledingmaat.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Oldtimer Pension
+    url: https://oldtimerpension.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /oldtimer-stalling/
+      - /restauratie/
+      - /onze-gasten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Ontmoeten MKW
+    url: https://www.ontmoeten-mkw.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /activiteiten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Pauls Webshop
+    url: https://paulswebshop.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /shop/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Pauls BV
+    url: https://pauls.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Pickup Taxi
+    url: https://pickuptaxi.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /tarieven/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Lokganzen
+    url: https://lokganzen.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /ganzenlokkers/
+      - /lokvogels-te-koop/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: QPools
+    url: https://qpools.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /zwembaden/
+      - /diensten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: RBEA
+    url: https://rbea.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Blauwe Sluis
+    url: https://deblauwesluis.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /menukaart/
+      - /reserveren-contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Revitech Verwarming
+    url: https://www.revitechverwarming.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /overons/
+      - /shop/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Richard van Mensvoort
+    url: https://richardvanmensvoort.com
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /over-mij/
+      - /diensten/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: RPP Revalidatie
+    url: https://www.rpprevalidatie.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /behandelingen/
+      - /afspraak/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Schadeautos Edo
+    url: https://schadeautosedo.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /aanbod/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Van der Maazen
+    url: https://vandermaazen.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Solidafix
+    url: https://www.solidafix.com
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /producten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Spierings Webshop
+    url: https://spieringswebshop.com
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /shop/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Steenbruggen Stucwerken
+    url: https://steenbruggenstucwerken.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /projecten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Stemi Fijnmetaal
+    url: https://stemifijnmetaal.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /over-ons/
+      - /diensten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Laurenshoeve
+    url: https://laurenshoeve.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /kamperen/
+      - /bed-and-breakfast/
+      - /groepsaccommodatie/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Restaurant St. Walrick
+    url: https://walrick.nl
+    sitemap: "menu"
+    maxPages: 8
+    pages:
+      - /
+      - /menukaart/
+      - /reserveren/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 2
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Maaskantseboys
+    url: https://www.maaskantseboys.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Van Erp Bouwbedrijf
+    url: https://vanerpbouwbedrijf.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /projecten/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Van Gaal Afrasteringstechniek
+    url: https://www.vangaalafrastering.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /diensten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Van Hooff Henos
+    url: https://vanhooffhenos.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /grafmonumenten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 200
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Verwegen Hoof Trimming Chutes
+    url: https://verwegenhooftrimmingchutes.com
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /producten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Verwegen Klauwbekapboxen
+    url: https://verwegenklauwbekapboxen.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /hydraulische-klauwbekapbox/
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Van Wanrooij Lastechnieken
+    url: https://www.vanwanrooijlastechnieken.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /producten/
+      - /over-ons/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: Wertenbroek Asperges
+    url: https://wertenbroekasperges.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /producten/
+      - /afhaalpunten/
+      - /contact/
+    minTextLength: 150
+    minImages: 1
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
+
+  - name: De Brons Fotografie
+    url: https://www.debronsfotografie.nl
+    sitemap: "menu"
+    maxPages: 6
+    pages:
+      - /
+      - /over-mij/
+      - /portfolio/
+      - /tarieven/
+      - /contact/
+    minTextLength: 200
+    minImages: 2
+    minButtons: 1
+    requiredSelectors:
+      - "body"
+      - "img"
+      - "a"
+      - "header, nav, .elementor-location-header, .site-header"
