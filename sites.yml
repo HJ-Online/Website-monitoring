@@ -30,7 +30,6 @@ sites:
     pages:
       - /
       - /over-ons/
-      - /diensten/
       - /schadeherstel/
       - /contact/
     minTextLength: 250
@@ -125,7 +124,7 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /aanbod-2025-2026/
+      - /aanbod/
       - /nieuws/
       - /contact/
     minTextLength: 200
@@ -262,7 +261,7 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /diensten/
+      - /aanbod/
       - /over-ons/
       - /contact/
     minTextLength: 200
@@ -405,7 +404,6 @@ sites:
     maxPages: 5
     pages:
       - /
-      - /contact/
     minTextLength: 100
     minImages: 1
     minButtons: 1
@@ -437,8 +435,6 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /over-ons/
-      - /producten/
       - /contact/
     minTextLength: 200
     minImages: 1
@@ -525,7 +521,6 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /diensten/
       - /over-ons/
       - /contact/
     minTextLength: 200
@@ -756,7 +751,6 @@ sites:
     pages:
       - /
       - /aanbod/
-      - /over-ons/
       - /contact/
     minTextLength: 200
     minImages: 1
@@ -810,7 +804,6 @@ sites:
     pages:
       - /
       - /shop/
-      - /contact/
     minTextLength: 150
     minImages: 1
     minButtons: 2
@@ -899,7 +892,6 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /over-ons/
       - /contact/
     minTextLength: 150
     minImages: 1
@@ -1005,8 +997,6 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /producten/
-      - /over-ons/
       - /contact/
     minTextLength: 150
     minImages: 1
