@@ -98,18 +98,39 @@ function isVisitorVisibleProblem(result) {
   ];
 
   const visitorSignals = [
-    "geen response", "timeout", "net::err", "http fout",
+    "geen response", "timeout (geen reactie", "net::err", "http fout",
     "tekst ontbreekt", "knop/tekst ontbreekt",
     "css bestand laadt niet", "javascript bestand laadt niet",
     "pagina lijkt niet goed gestyled", "te weinig zichtbare tekst",
     "te weinig afbeeldingen", "belangrijke selector ontbreekt",
-    "page.goto", "navigation"
+    "server fout"
   ];
 
   const hasVisitorSignal = visitorSignals.some(s => details.includes(s));
   const onlyIgnored = ignoredSignals.some(s => details.includes(s)) && !hasVisitorSignal;
 
   return hasVisitorSignal && !onlyIgnored;
+}
+
+/**
+ * Detect runner-wide network outage: if ALL sites have only timeout errors,
+ * this is almost certainly a GitHub Actions infrastructure problem, not a
+ * real website outage. Skip issue creation in that case.
+ */
+function isRunnerOutage(results, websites) {
+  const errorSites = websites.filter(w => w.status === "error");
+  if (errorSites.length < 2) return false; // Need at least 2 sites affected
+
+  // Check if every single error result across ALL sites is a timeout
+  const allErrorResults = results.filter(r => r.status === "error");
+  if (allErrorResults.length === 0) return false;
+
+  const allAreTimeouts = allErrorResults.every(r => r.isTimeout === true);
+
+  // If every error is a bare timeout AND more than half of all sites are affected,
+  // treat this as a runner outage
+  const affectedFraction = errorSites.length / websites.length;
+  return allAreTimeouts && affectedFraction >= 0.5;
 }
 
 /**
@@ -159,6 +180,12 @@ async function createOrUpdateVisitorIssue(results, websites) {
 
   const visitorProblems = results.filter(isVisitorVisibleProblem);
   if (visitorProblems.length === 0) { console.log("Geen bezoekersproblemen. Geen issue nodig."); return; }
+
+  // Check for runner-wide network outage (all sites timeout = GitHub infra problem, not real outage)
+  if (isRunnerOutage(results, websites)) {
+    console.log("⚠️  Runner-wide timeout gedetecteerd — waarschijnlijk GitHub Actions netwerkprobleem. Geen issue aangemaakt.");
+    return;
+  }
 
   const dashboardUrl = process.env.DASHBOARD_URL || "https://hj-online.github.io/Website-monitoring/";
   const fingerprint = createFingerprint(visitorProblems);
@@ -405,7 +432,7 @@ async function runFrontendHealthChecks(page, site, details) {
 
 // ─── Main page check ───────────────────────────────────────────────────────────
 
-async function checkPage(browser, site, path) {
+async function checkPage(browser, site, path, isRetry = false) {
   const url = site.url.replace(/\/$/, "") + path;
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
@@ -539,12 +566,33 @@ async function checkPage(browser, site, path) {
       } catch {}
     }
   } catch (e) {
-    status = "error";
-    details.push(e.message);
-    try {
-      await page.screenshot({ path: `dashboard/${screenshotName}`, fullPage: false });
-      screenshot = screenshotName;
-    } catch {}
+    await page.close();
+    await context.close();
+
+    const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
+
+    // Retry once on timeout before marking as error — catches flaky runner network
+    if (isTimeout && !isRetry) {
+      console.log(`  Timeout op ${url} — 1x herproberen na 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+      return checkPage(browser, site, path, true);
+    }
+
+    // If it was a timeout on retry (or a non-timeout error), mark as error
+    // But flag it so the issue-logic can detect runner-wide outages
+    const label = isTimeout ? "Timeout (geen reactie van server)" : e.message;
+    return {
+      site: site.name,
+      siteUrl: site.url,
+      path,
+      url,
+      status: "error",
+      details: [label],
+      checkedAt: new Date().toLocaleString("nl-NL"),
+      screenshot: null,
+      responseTimeMs: null,
+      isTimeout
+    };
   }
 
   await page.close();
