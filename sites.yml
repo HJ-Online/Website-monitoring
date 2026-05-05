@@ -30,8 +30,10 @@ sites:
     pages:
       - /
       - /over-ons/
-      - /diensten/
       - /schadeherstel/
+      - /fotos-werk/
+      - /openingstijden/
+      - /reviews/
       - /contact/
     requiredText: []
     requiredButtons: []
