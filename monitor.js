@@ -4,7 +4,8 @@ const yaml = require("js-yaml");
 const crypto = require("crypto");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
-const CONCURRENCY = Number(process.env.CONCURRENCY || 3);
+// Concurrency 1 = één site tegelijk afwerken, voorkomt server overload (503) op gedeelde hosting
+const CONCURRENCY = Number(process.env.CONCURRENCY || 1);
 const GITHUB_USERNAME = "HJ-Online";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -1000,12 +1001,26 @@ function sortRows() {
       console.log("Pagina detectie fout bij:", site.name, e.message);
       pages = site.pages || ["/"];
     }
-    for (const path of pages) {
-      tasks.push(() => checkPage(browser, site, path));
-    }
+
+    // Alle pagina's van één site worden sequentieel gecheckt met een korte pauze
+    // ertussen, zodat de server niet overbelast raakt (voorkomt 503 op gedeelde hosting)
+    tasks.push(async () => {
+      const siteResults = [];
+      for (const path of pages) {
+        const result = await checkPage(browser, site, path);
+        siteResults.push(result);
+        // Kleine pauze tussen pagina's van dezelfde site (1.5s)
+        if (pages.indexOf(path) < pages.length - 1) {
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+      return siteResults;
+    });
   }
 
-  const results = await runParallel(tasks, CONCURRENCY);
+  // Sites worden parallel verwerkt (CONCURRENCY), pagina's per site sequentieel
+  const nestedResults = await runParallel(tasks, CONCURRENCY);
+  const results = nestedResults.flat();
 
   await requestContext.dispose();
   await browser.close();
