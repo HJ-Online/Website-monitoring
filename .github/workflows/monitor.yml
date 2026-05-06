@@ -5,6 +5,11 @@ on:
     - cron: "0 8,20 * * *"
   workflow_dispatch:
 
+# Voorkomt dat twee runs tegelijk draaien (bijv. bij handmatige trigger tijdens geplande run)
+concurrency:
+  group: monitoring
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pages: write
@@ -14,13 +19,14 @@ permissions:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 90  # 59 sites × ~6 pagina's sequentieel kan 45-60 min duren
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24  # Geüpdatet: Node 20 deprecated per 2 juni 2026
 
       - run: npm install
 
@@ -39,6 +45,7 @@ jobs:
   deploy:
     needs: monitor
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
 
