@@ -272,23 +272,6 @@ sites:
       - "a"
       - "header, nav, .elementor-location-header, .site-header"
 
-  - name: Etienne Termont
-    url: https://etiennetermont.nl
-    sitemap: "menu"
-    maxPages: 6
-    pages:
-      - /
-      - /over-mij/
-      - /diensten/
-      - /contact/
-    minTextLength: 200
-    minImages: 1
-    minButtons: 1
-    requiredSelectors:
-      - "body"
-      - "a"
-      - "header, nav, .elementor-location-header, .site-header"
-
   - name: Horse Logistics
     url: https://horse-logistics.nl
     sitemap: "menu"
