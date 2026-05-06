@@ -504,7 +504,6 @@ sites:
     maxPages: 6
     pages:
       - /
-      - /over-ons/
       - /contact/
     minTextLength: 200
     minImages: 1
