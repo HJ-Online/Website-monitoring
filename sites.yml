@@ -569,7 +569,7 @@ sites:
       - "header, nav, .elementor-location-header, .site-header"
 
   - name: Pauls BV
-    url: https://pauls.nl
+    url: https://paulsbv.nl
     sitemap: "menu"
     maxPages: 6
     pages:
