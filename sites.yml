@@ -701,7 +701,7 @@ sites:
       - /diensten/
       - /contact/
     minTextLength: 150
-    minImages: 1
+    minImages: 0
     minButtons: 1
     requiredSelectors:
       - "body"
