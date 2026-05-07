@@ -48,16 +48,23 @@ const HISTORY_FILE = "dashboard/history.json";
 function loadHistory() {
   try {
     if (fs.existsSync(HISTORY_FILE)) {
-      return JSON.parse(fs.readFileSync(HISTORY_FILE, "utf8"));
+      const raw = fs.readFileSync(HISTORY_FILE, "utf8");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Ongeldig formaat");
+      return parsed;
     }
-  } catch {}
+  } catch (e) {
+    console.warn("⚠️  history.json onleesbaar of corrupt, start opnieuw:", e.message);
+    const backup = HISTORY_FILE + ".corrupt." + Date.now();
+    try { fs.renameSync(HISTORY_FILE, backup); } catch {}
+  }
   return {};
 }
 
 function saveHistory(history) {
-  fs.writeFile(HISTORY_FILE, JSON.stringify(history, null, 2), err => {
-    if (err) console.error("History opslaan mislukt:", err.message);
-  });
+  const tmp = HISTORY_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(history, null, 2));
+  fs.renameSync(tmp, HISTORY_FILE);
 }
 
 /**
@@ -66,6 +73,12 @@ function saveHistory(history) {
  */
 function updateHistory(history, websites) {
   const now = new Date().toISOString();
+  const activeSiteNames = new Set(websites.map(s => s.name));
+
+  // Verwijder history van sites die niet meer in sites.yml staan
+  for (const key of Object.keys(history)) {
+    if (!activeSiteNames.has(key)) delete history[key];
+  }
 
   for (const site of websites) {
     if (!history[site.name]) history[site.name] = [];
@@ -76,10 +89,10 @@ function updateHistory(history, websites) {
       ok: site.ok,
       warning: site.warning,
       error: site.error,
-      avgResponseMs: site.avgResponseMs
+      avgResponseMs: site.avgResponseMs,
+      p95ResponseMs: site.p95ResponseMs ?? null
     });
 
-    // Keep last 30 entries (~15 days @ 2x/day)
     if (history[site.name].length > 30) {
       history[site.name] = history[site.name].slice(-30);
     }
@@ -1119,8 +1132,9 @@ function sortRows() {
   const websites = Object.values(grouped).map(site => {
     const hasError = site.pages.some(p => p.status === "error");
     const hasWarning = site.pages.some(p => p.status === "warning");
-    const times = site.pages.map(p => p.responseTimeMs).filter(t => t != null);
+    const times = site.pages.map(p => p.responseTimeMs).filter(t => t != null).sort((a, b) => a - b);
     const avgResponseMs = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null;
+    const p95ResponseMs = times.length ? times[Math.floor(times.length * 0.95)] ?? times[times.length - 1] : null;
 
     return {
       ...site,
@@ -1130,7 +1144,8 @@ function sortRows() {
       error: site.pages.filter(p => p.status === "error").length,
       total: site.pages.length,
       lastCheck: site.pages[site.pages.length - 1]?.checkedAt || "",
-      avgResponseMs
+      avgResponseMs,
+      p95ResponseMs
     };
   });
 
