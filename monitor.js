@@ -55,7 +55,9 @@ function loadHistory() {
 }
 
 function saveHistory(history) {
-  fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+  fs.writeFile(HISTORY_FILE, JSON.stringify(history, null, 2), err => {
+    if (err) console.error("History opslaan mislukt:", err.message);
+  });
 }
 
 /**
