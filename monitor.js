@@ -665,8 +665,6 @@ async function checkPage(browser, site, path, isRetry = false) {
 
     const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
 
-    const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
-
     // Retry once on timeout before marking as error — catches flaky runner network
     if (isTimeout && !isRetry) {
       console.log(`  Timeout op ${url} — 1x herproberen na 5s...`);
