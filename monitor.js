@@ -538,7 +538,7 @@ async function checkPage(browser, site, path, isRetry = false) {
     const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
     responseTimeMs = Date.now() - start;
 
-    await page.waitForTimeout(1500);
+    await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
 
     const httpStatus = response?.status();
 
@@ -641,8 +641,10 @@ async function checkPage(browser, site, path, isRetry = false) {
       } catch {}
     }
   } catch (e) {
-    await page.close();
-    await context.close();
+  try { await page.close(); } catch {}
+  try { await context.close(); } catch {}
+
+    const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
 
     const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
 
@@ -670,8 +672,8 @@ async function checkPage(browser, site, path, isRetry = false) {
     };
   }
 
-  await page.close();
-  await context.close();
+  try { await page.close(); } catch {}
+  try { await context.close(); } catch {}
 
   return {
     site: site.name,
@@ -1078,14 +1080,18 @@ function sortRows() {
 
     // Alle pagina's van één site worden sequentieel gecheckt met een korte pauze
     // ertussen, zodat de server niet overbelast raakt (voorkomt 503 op gedeelde hosting)
-    tasks.push(async () => {
+     tasks.push(async () => {
+      const PAGE_CONCURRENCY = 3;
+      const chunks = [];
+      for (let i = 0; i < pages.length; i += PAGE_CONCURRENCY) {
+        chunks.push(pages.slice(i, i + PAGE_CONCURRENCY));
+      }
       const siteResults = [];
-      for (const path of pages) {
-        const result = await checkPage(browser, site, path);
-        siteResults.push(result);
-        // Kleine pauze tussen pagina's van dezelfde site (1.5s)
-        if (pages.indexOf(path) < pages.length - 1) {
-          await new Promise(r => setTimeout(r, 1500));
+      for (const chunk of chunks) {
+        const chunkResults = await Promise.all(chunk.map(path => checkPage(browser, site, path)));
+        siteResults.push(...chunkResults);
+        if (chunks.indexOf(chunk) < chunks.length - 1) {
+          await new Promise(r => setTimeout(r, 800));
         }
       }
       return siteResults;
