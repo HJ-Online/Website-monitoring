@@ -181,6 +181,7 @@ async function createOrUpdateVisitorIssue(results, websites) {
 
   const visitorProblems = results.filter(isVisitorVisibleProblem);
   if (visitorProblems.length === 0) { console.log("Geen bezoekersproblemen. Geen issue nodig."); return; }
+  if (!token || !repo) { console.log("Geen GitHub token/repo. Issue overgeslagen."); return; }
 
   // Check for runner-wide network outage (all sites timeout = GitHub infra problem, not real outage)
   if (isRunnerOutage(results, websites)) {
@@ -400,8 +401,8 @@ async function getMenuUrls(browser, site) {
     console.log("Menu detectie mislukt bij:", site.name, e.message);
     return (site.pages || ["/"]).slice(0, Number(site.maxPages || 8));
   } finally {
-    await page.close();
-    await context.close();
+    try { await page.close(); } catch {}
+    try { await context.close(); } catch {}
   }
 }
 
@@ -1067,6 +1068,7 @@ function sortRows() {
     try {
       if (site.sitemap === "menu") {
         pages = await getMenuUrls(browser, site);
+        if (!pages.includes("/")) pages.unshift("/");
       } else if (site.sitemap) {
         pages = await getSitemapUrls(requestContext, site);
       } else {
