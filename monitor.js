@@ -44,6 +44,9 @@ function responseTimeClass(ms) {
 // ─── History (persistent JSON per site) ───────────────────────────────────────
 
 const HISTORY_FILE = "dashboard/history.json";
+// NOTA: history.json gebruikt atomic rename voor crash-safety.
+// Gelijktijdige runs worden voorkomen via concurrency: group: monitoring in de workflow.
+// Bij horizontale scaling naar meerdere runners is een externe store (Redis/SQLite) nodig.
 
 function loadHistory() {
   try {
