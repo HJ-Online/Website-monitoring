@@ -89,12 +89,11 @@ function updateHistory(history, websites) {
 
     history[site.name].push({
       ts: now,
-      status: site.status,
+      st: site.status[0], // "o"/"w"/"e" — 70% kleiner
       ok: site.ok,
-      warning: site.warning,
-      error: site.error,
-      avgResponseMs: site.avgResponseMs,
-      p95ResponseMs: site.p95ResponseMs ?? null
+      w: site.warning,
+      e: site.error,
+      rt: site.avgResponseMs ? Math.round(site.avgResponseMs) : null
     });
 
     if (history[site.name].length > 30) {
@@ -713,7 +712,8 @@ function buildUptimeBadges(historyEntries) {
   if (!historyEntries || historyEntries.length === 0) return '<span style="color:var(--muted);font-size:12px">Geen historie</span>';
 
   return historyEntries.slice(-14).map(entry => {
-    const color = entry.status === "ok" ? "var(--success)" : entry.status === "warning" ? "var(--warning)" : "var(--danger)";
+    const s = entry.st || entry.status; // backwards compat
+    const color = s === "o" || s === "ok" ? "var(--success)" : s === "w" || s === "warning" ? "var(--warning)" : "var(--danger)";
     const date = new Date(entry.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
     return `<span title="${date}: ${entry.status}" style="display:inline-block;width:10px;height:22px;border-radius:3px;background:${color};margin:0 1px;opacity:0.85;cursor:default;"></span>`;
   }).join("");
@@ -721,7 +721,7 @@ function buildUptimeBadges(historyEntries) {
 
 function uptimePercentage(historyEntries) {
   if (!historyEntries || historyEntries.length === 0) return null;
-  const ok = historyEntries.filter(e => e.status === "ok").length;
+  const ok = historyEntries.filter(e => (e.st || e.status) === "o" || (e.st || e.status) === "ok").length;
   return Math.round((ok / historyEntries.length) * 100);
 }
 
@@ -928,7 +928,22 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-wei
     <span class="logo">HJ Online</span>
   </div>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Bijgewerkt op ${esc(lastCheck)}.</p>
+  <p>Automatische controle van WordPress- en WooCommerce-websites. Bijgewerkt op ${esc(lastCheck)}. <span id="nextCheck"></span></p>
+<script>
+(function(){
+  const now = new Date();
+  const h = now.getHours();
+  const next = new Date(now);
+  if (h < 8) { next.setHours(8,0,0,0); }
+  else if (h < 20) { next.setHours(20,0,0,0); }
+  else { next.setDate(next.getDate()+1); next.setHours(8,0,0,0); }
+  const diff = Math.round((next - now) / 60000);
+  const hrs = Math.floor(diff/60), mins = diff%60;
+  document.getElementById('nextCheck').textContent =
+    '· Volgende check over ' + (hrs ? hrs+'u ' : '') + mins + 'm';
+  setTimeout(() => location.reload(), (next - now));
+})();
+</script>
 </header>
 
 <main>
@@ -1034,19 +1049,26 @@ function togglePageDetails(id) {
   if (row) row.style.display = row.style.display === "none" ? "table-row" : "none";
 }
 
+let filterTimer;
 function filterRows() {
-  const q = document.getElementById("searchInput").value.toLowerCase();
-  const status = document.getElementById("statusFilter").value;
-  const rows = document.querySelectorAll(".website-row");
-  let visible = 0;
-  rows.forEach(row => {
-    const match = (row.dataset.site.includes(q) || row.innerText.toLowerCase().includes(q)) &&
-                  (!status || row.dataset.status === status);
-    row.style.display = match ? "table-row" : "none";
-    document.querySelectorAll(".page-of-" + row.dataset.index).forEach(p => p.style.display = "none");
-    if (match) visible++;
-  });
-  document.getElementById("emptyState").style.display = visible ? "none" : "block";
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    const status = document.getElementById("statusFilter").value;
+    const rows = document.querySelectorAll(".website-row");
+    let visible = 0;
+    rows.forEach(row => {
+      const nameMatch = row.dataset.site.includes(q);
+      const match = (nameMatch || (q.length > 1 && row.innerText.toLowerCase().includes(q))) &&
+                    (!status || row.dataset.status === status);
+      row.style.display = match ? "table-row" : "none";
+      if (!match) {
+        document.querySelectorAll(".page-of-" + row.dataset.index).forEach(p => p.style.display = "none");
+      }
+      if (match) visible++;
+    });
+    document.getElementById("emptyState").style.display = visible ? "none" : "block";
+  }, 80);
 }
 
 function sortRows() {
