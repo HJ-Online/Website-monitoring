@@ -1101,7 +1101,6 @@ function sortRows() {
   const history = loadHistory();
   const browser = await chromium.launch();
   const requestContext = await request.newContext();
-  const tasks = [];
 
   async function resolvePages(site) {
     try {
