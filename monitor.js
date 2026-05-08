@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 // Concurrency 1 = één site tegelijk afwerken, voorkomt server overload (503) op gedeelde hosting
 const CONCURRENCY = Number(process.env.CONCURRENCY || 1);
+const PAGE_CONCURRENCY = CONCURRENCY > 1 ? 2 : 3;
 const GITHUB_USERNAME = "HJ-Online";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -666,9 +667,10 @@ async function checkPage(browser, site, path, isRetry = false) {
     const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
 
     // Retry once on timeout before marking as error — catches flaky runner network
-    if (isTimeout && !isRetry) {
-      console.log(`  Timeout op ${url} — 1x herproberen na 5s...`);
-      await new Promise(r => setTimeout(r, 5000));
+  if (isTimeout && !isRetry) {
+      const backoff = 5000 + Math.random() * 3000;
+      console.log(`  Timeout op ${url} — herproberen na ${Math.round(backoff / 1000)}s...`);
+      await new Promise(r => setTimeout(r, backoff));
       return checkPage(browser, site, path, true);
     }
 
@@ -1079,9 +1081,9 @@ function sortRows() {
   const requestContext = await request.newContext();
   const tasks = [];
 
-  for (const site of config.sites || []) {
-    let pages = ["/"];
+  async function resolvePages(site) {
     try {
+      let pages;
       if (site.sitemap === "menu") {
         pages = await getMenuUrls(browser, site);
         if (!pages.includes("/")) pages.unshift("/");
@@ -1091,30 +1093,36 @@ function sortRows() {
         pages = site.pages || ["/"];
       }
       if (!pages || pages.length === 0) pages = site.pages || ["/"];
+      return pages;
     } catch (e) {
       console.log("Pagina detectie fout bij:", site.name, e.message);
-      pages = site.pages || ["/"];
+      return site.pages || ["/"];
     }
-
-    // Alle pagina's van één site worden sequentieel gecheckt met een korte pauze
-    // ertussen, zodat de server niet overbelast raakt (voorkomt 503 op gedeelde hosting)
-     tasks.push(async () => {
-      const PAGE_CONCURRENCY = 3;
-      const chunks = [];
-      for (let i = 0; i < pages.length; i += PAGE_CONCURRENCY) {
-        chunks.push(pages.slice(i, i + PAGE_CONCURRENCY));
-      }
-      const siteResults = [];
-      for (const chunk of chunks) {
-        const chunkResults = await Promise.all(chunk.map(path => checkPage(browser, site, path)));
-        siteResults.push(...chunkResults);
-        if (chunks.indexOf(chunk) < chunks.length - 1) {
-          await new Promise(r => setTimeout(r, 800));
-        }
-      }
-      return siteResults;
-    });
   }
+
+  // Menu-detectie parallel uitvoeren (max 3 tegelijk — lichte HTTP-requests)
+  const MENU_CONCURRENCY = 3;
+  const sites = config.sites || [];
+  const resolvedPages = await runParallel(
+    sites.map(site => () => resolvePages(site)),
+    MENU_CONCURRENCY
+  );
+
+  const tasks = sites.map((site, i) => async () => {
+    const pages = resolvedPages[i];
+    const PAGE_CONCURRENCY = 3;
+    const chunks = [];
+    for (let idx = 0; idx < pages.length; idx += PAGE_CONCURRENCY) {
+      chunks.push(pages.slice(idx, idx + PAGE_CONCURRENCY));
+    }
+    const siteResults = [];
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunkResults = await Promise.all(chunks[ci].map(path => checkPage(browser, site, path)));
+      siteResults.push(...chunkResults);
+      if (ci < chunks.length - 1) await new Promise(r => setTimeout(r, 800));
+    }
+    return siteResults;
+  });
 
   // Sites worden parallel verwerkt (CONCURRENCY), pagina's per site sequentieel
   const nestedResults = await runParallel(tasks, CONCURRENCY);
