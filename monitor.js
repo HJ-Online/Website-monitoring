@@ -5,7 +5,7 @@ const crypto = require("crypto");
 
 const config = yaml.load(fs.readFileSync("sites.yml", "utf8"));
 // Concurrency 1 = één site tegelijk afwerken, voorkomt server overload (503) op gedeelde hosting
-const CONCURRENCY = Number(process.env.CONCURRENCY || 1);
+const CONCURRENCY = Math.min(Math.max(Number(process.env.CONCURRENCY || 1) || 1, 1), 3);
 const PAGE_CONCURRENCY = CONCURRENCY > 1 ? 2 : 3;
 const GITHUB_USERNAME = "HJ-Online";
 
