@@ -1166,7 +1166,7 @@ function sortRows() {
     for (let ci = 0; ci < chunks.length; ci++) {
       const chunkResults = await Promise.all(chunks[ci].map(path => checkPage(browser, site, path)));
       siteResults.push(...chunkResults);
-      if (ci < chunks.length - 1) await new Promise(r => setTimeout(r, 800));
+      if (ci < chunks.length - 1) await new Promise(r => setTimeout(r, 2000));
     }
     return siteResults;
   });
