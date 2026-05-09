@@ -653,10 +653,15 @@ async function checkPage(browser, site, path, isRetry = false) {
     }
 
     const shouldTakeScreenshot = status !== "ok" || path === "/";
-    if (shouldTakeScreenshot && !skipFrontendChecks) {
+  if (shouldTakeScreenshot && !skipFrontendChecks) {
       try {
-        await page.screenshot({ path: `dashboard/${screenshotName}`, fullPage: false, clip: { x: 0, y: 0, width: 1280, height: 900 } });
-        screenshot = screenshotName;
+        const safePath = `dashboard/${screenshotName}`;
+        const resolved = require("path").resolve(safePath);
+        const dashboardDir = require("path").resolve("dashboard");
+        if (resolved.startsWith(dashboardDir + require("path").sep)) {
+          await page.screenshot({ path: safePath, fullPage: false, clip: { x: 0, y: 0, width: 1280, height: 900 } });
+          screenshot = screenshotName;
+        }
       } catch {}
     }
   } catch (e) {
