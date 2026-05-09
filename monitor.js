@@ -9,6 +9,16 @@ const CONCURRENCY = Number(process.env.CONCURRENCY || 1);
 const PAGE_CONCURRENCY = CONCURRENCY > 1 ? 2 : 3;
 const GITHUB_USERNAME = "HJ-Online";
 
+async function githubFetch(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function safeFileName(text) {
@@ -44,7 +54,7 @@ function responseTimeClass(ms) {
 
 // ─── History (persistent JSON per site) ───────────────────────────────────────
 
-const HISTORY_FILE = "dashboard/history.json";
+const HISTORY_FILE = "history.json";
 // NOTA: history.json gebruikt atomic rename voor crash-safety.
 // Gelijktijdige runs worden voorkomen via concurrency: group: monitoring in de workflow.
 // Bij horizontale scaling naar meerdere runners is een externe store (Redis/SQLite) nodig.
@@ -171,17 +181,24 @@ function createFingerprint(items) {
 }
 
 async function findOpenMonitoringIssue(token, repo) {
-  const res = await fetch(
+  const res = await githubFetch(
     `https://api.github.com/repos/${repo}/issues?state=open&per_page=100`,
     { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } }
   );
-  if (!res.ok) return null;
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  if (remaining !== null && Number(remaining) < 10) {
+    console.warn(`⚠️  GitHub API rate limit bijna bereikt: ${remaining} requests over`);
+  }
+  if (!res.ok) {
+    console.error(`GitHub API fout bij ophalen issues: HTTP ${res.status}`);
+    return null;
+  }
   const issues = await res.json();
-  return issues.find(i => i.title.startsWith("🚨 Website monitoring: bezoekersprobleem"));
+  return issues.find(i => i.title.startsWith("🚨 Monitoring:"));
 }
 
 async function addIssueComment(token, repo, issueNumber, body) {
-  const res = await fetch(
+  const res = await githubFetch(
     `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`,
     {
       method: "POST",
@@ -219,7 +236,7 @@ async function createOrUpdateVisitorIssue(results, websites) {
     seenFingerprints = bodyMatches.map(m => m[1]);
 
     try {
-      const commentsRes = await fetch(
+      const commentsRes = await githubFetch(
         `https://api.github.com/repos/${repo}/issues/${existingIssue.number}/comments?per_page=100`,
         { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } }
       );
@@ -322,7 +339,7 @@ async function createOrUpdateVisitorIssue(results, websites) {
   ].join("\n");
 
   if (!existingIssue) {
-    const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+    const res = await githubFetch(`https://api.github.com/repos/${repo}/issues`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" },
       body: JSON.stringify({ title: `🚨 Monitoring: ${errorCount} website(s) met errors — ${checkedAt}`, body: newIssueBody })
