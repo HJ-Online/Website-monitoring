@@ -148,18 +148,17 @@ function isVisitorVisibleProblem(result) {
  */
 function isRunnerOutage(results, websites) {
   const errorSites = websites.filter(w => w.status === "error");
-  if (errorSites.length < 2) return false; // Need at least 2 sites affected
+  if (errorSites.length < 3) return false;
 
-  // Check if every single error result across ALL sites is a timeout
   const allErrorResults = results.filter(r => r.status === "error");
   if (allErrorResults.length === 0) return false;
 
-  const allAreTimeouts = allErrorResults.every(r => r.isTimeout === true);
-
-  // If every error is a bare timeout AND more than half of all sites are affected,
-  // treat this as a runner outage
+  const timeoutCount = allErrorResults.filter(r => r.isTimeout === true).length;
+  const timeoutFraction = timeoutCount / allErrorResults.length;
   const affectedFraction = errorSites.length / websites.length;
-  return allAreTimeouts && affectedFraction >= 0.5;
+
+  // Runner outage als: >80% van errors is timeout EN >40% van sites getroffen
+  return timeoutFraction >= 0.8 && affectedFraction >= 0.4;
 }
 
 /**
@@ -571,10 +570,10 @@ async function checkPage(browser, site, path, isRetry = false) {
 
   try {
     const start = Date.now();
-    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
     responseTimeMs = Date.now() - start;
 
-    await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
     const httpStatus = response?.status();
 
@@ -689,11 +688,9 @@ async function checkPage(browser, site, path, isRetry = false) {
 
     // Retry once on timeout before marking as error — catches flaky runner network
   if (isTimeout && !isRetry) {
-      const backoff = 5000 + Math.random() * 3000;
-      console.log(`  Timeout op ${url} — herproberen na ${Math.round(backoff / 1000)}s...`);
-      await new Promise(r => setTimeout(r, backoff));
+    console.log(`  Timeout op ${url} — herproberen...`);
+      await new Promise(r => setTimeout(r, 2000));
       return checkPage(browser, site, path, true);
-    }
 
     // If it was a timeout on retry (or a non-timeout error), mark as error
     // But flag it so the issue-logic can detect runner-wide outages
@@ -747,7 +744,7 @@ function uptimePercentage(historyEntries) {
   return Math.round((ok / historyEntries.length) * 100);
 }
 
-function buildDashboard(websites, history) {
+function buildDashboard(websites, history, runnerOutage = false) {
   const totalPages = websites.reduce((s, w) => s + w.total, 0);
   const totalWebsites = websites.length;
   const okWebsites = websites.filter(w => w.status === "ok").length;
@@ -950,8 +947,7 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-wei
     <span class="logo">HJ Online</span>
   </div>
   <h1>Website Monitoring Dashboard</h1>
-  <p>Automatische controle van WordPress- en WooCommerce-websites. Bijgewerkt op ${esc(lastCheck)}. <span id="nextCheck"></span></p>
-<script>
+<p>Automatische controle van WordPress- en WooCommerce-websites. Bijgewerkt op ${esc(lastCheck)}. <span id="nextCheck"></span>${runnerOutage ? ' <strong style="color:#b54708">⚠️ Mogelijke runner-netwerkstoring — resultaten mogelijk onbetrouwbaar.</strong>' : ''}</p><script>
 (function(){
   const now = new Date();
   const h = now.getHours();
@@ -1216,10 +1212,13 @@ function sortRows() {
   saveHistory(updatedHistory);
 
   // Create GitHub issue if needed
+  const runnerOutage = isRunnerOutage(results, websites);
+  if (runnerOutage) {
+    console.warn("⚠️  Runner-wide outage gedetecteerd — dashboard wordt gegenereerd maar geen issue aangemaakt.");
+  }
   await createOrUpdateVisitorIssue(results, websites);
-
   // Write dashboard
-  const html = buildDashboard(websites, updatedHistory);
+const html = buildDashboard(websites, updatedHistory, runnerOutage);
   fs.writeFileSync("dashboard/index.html", html);
 
   console.log(`\n✅ Dashboard klaar — ${websites.length} websites, ${results.length} pagina checks`);
