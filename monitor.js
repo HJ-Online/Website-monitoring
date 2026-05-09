@@ -196,10 +196,10 @@ async function createOrUpdateVisitorIssue(results, websites) {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
   if (!token || !repo) { console.log("Geen GitHub token/repo. Issue overgeslagen."); return; }
+  if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)) { console.error("Ongeldige GITHUB_REPOSITORY waarde. Afgebroken."); return; }
 
   const visitorProblems = results.filter(isVisitorVisibleProblem);
   if (visitorProblems.length === 0) { console.log("Geen bezoekersproblemen. Geen issue nodig."); return; }
-  if (!token || !repo) { console.log("Geen GitHub token/repo. Issue overgeslagen."); return; }
 
   // Check for runner-wide network outage (all sites timeout = GitHub infra problem, not real outage)
   if (isRunnerOutage(results, websites)) {
@@ -1097,6 +1097,16 @@ function sortRows() {
 
 (async () => {
   fs.mkdirSync("dashboard", { recursive: true });
+
+  // Verwijder screenshots van vorige runs (bewaar alleen history.json en index.html)
+  try {
+    const dashFiles = fs.readdirSync("dashboard");
+    for (const f of dashFiles) {
+      if (f.endsWith(".png")) fs.unlinkSync(`dashboard/${f}`);
+    }
+  } catch (e) {
+    console.warn("⚠️  Screenshot cleanup mislukt:", e.message);
+  }
 
   const history = loadHistory();
   const browser = await chromium.launch();
