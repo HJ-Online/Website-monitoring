@@ -687,30 +687,27 @@ async function checkPage(browser, site, path, isRetry = false) {
     const isTimeout = e.message.includes("Timeout") || e.message.includes("timeout");
 
     // Retry once on timeout before marking as error — catches flaky runner network
-  if (isTimeout && !isRetry) {
+if (isTimeout && !isRetry) {
     console.log(`  Timeout op ${url} — herproberen...`);
-      await new Promise(r => setTimeout(r, 2000));
-      return checkPage(browser, site, path, true);
-
-    // If it was a timeout on retry (or a non-timeout error), mark as error
-    // But flag it so the issue-logic can detect runner-wide outages
-    const label = isTimeout ? "Timeout (geen reactie van server)" : e.message;
-    return {
-      site: site.name,
-      siteUrl: site.url,
-      path,
-      url,
-      status: "error",
-      details: [label],
-      checkedAt: new Date().toLocaleString("nl-NL"),
-      screenshot: null,
-      responseTimeMs: null,
-      isTimeout
-    };
+    await new Promise(r => setTimeout(r, 2000));
+    return checkPage(browser, site, path, true);
   }
 
-  try { await page.close(); } catch {}
-  try { await context.close(); } catch {}
+  // If it was a timeout on retry (or a non-timeout error), mark as error
+  // But flag it so the issue-logic can detect runner-wide outages
+  const label = isTimeout ? "Timeout (geen reactie van server)" : e.message;
+  return {
+    site: site.name,
+    siteUrl: site.url,
+    path,
+    url,
+    status: "error",
+    details: [label],
+    checkedAt: new Date().toLocaleString("nl-NL"),
+    screenshot: null,
+    responseTimeMs: null,
+    isTimeout
+  };
 
   return {
     site: site.name,
