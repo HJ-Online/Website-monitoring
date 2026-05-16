@@ -1112,6 +1112,9 @@ function sortRows() {
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 (async () => {
+  const RUN_ID = `run-${Date.now()}`;
+  const runStart = Date.now();
+  console.log(JSON.stringify({ event: "run_start", runId: RUN_ID, ts: new Date().toISOString(), sites: (config.sites || []).length }));
   fs.mkdirSync("dashboard", { recursive: true });
 
   // Verwijder screenshots van vorige runs (bewaar alleen history.json en index.html)
